@@ -346,9 +346,7 @@ void RenderGame(void) {
                 algo->render(&game);
             }
 
-            if(algo && algo->update){
-                algo->update(&game);
-            }
+           
 
             
             break;
