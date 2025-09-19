@@ -8,8 +8,7 @@
 #include <string.h>
 #include <ctype.h>
 
-// External declaration of gameFont
-extern Font gameFont;
+// Using default font - no external font needed
 
 // Global game instance
 GameData game = {0};
@@ -84,6 +83,7 @@ void InitGame(void) {
 }
 
 void UpdateGame(void) {
+    // running all the time
     switch (game.currentState) {
         case STATE_MAIN_MENU:
             // Handle main menu input
@@ -154,7 +154,8 @@ void UpdateGame(void) {
         case STATE_GAMEPLAY:
             // Update player movement and physics
             UpdatePlayerMovement(&game);
-            
+
+          
             // Handle gameplay - delegate to algorithm
             AlgorithmFunctions* algo = GetAlgorithm(game.selectedAlgorithm);
             if (algo && algo->update) {
@@ -208,11 +209,9 @@ void UpdateGame(void) {
 void RenderGame(void) {
     switch (game.currentState) {
         case STATE_MAIN_MENU:
-            // Draw title with custom font
-            DrawTextEx(gameFont, "DISCRETIA", (Vector2){SCREEN_WIDTH/2 - MeasureTextEx(gameFont, "DISCRETIA", FONT_SIZE_TITLE, 2).x/2, 150}, FONT_SIZE_TITLE, 2, UI_TEXT_PRIMARY);
-            DrawTextEx(gameFont, "AN ALGO VISUALIZER PLATFORMER GAME", 
-                     (Vector2){SCREEN_WIDTH/2 - MeasureTextEx(gameFont, "AN ALGO VISUALIZER PLATFORMER GAME", FONT_SIZE_BODY, 1).x/2, 200}, 
-                     FONT_SIZE_BODY, 1, UI_TEXT_PRIMARY);
+            // Draw title with default font
+            DrawCenteredText("DISCRETIA", SCREEN_WIDTH/2, 150, FONT_SIZE_TITLE, UI_TEXT_PRIMARY);
+            DrawCenteredText("AN ALGO VISUALIZER PLATFORMER GAME", SCREEN_WIDTH/2, 200, FONT_SIZE_BODY, UI_TEXT_PRIMARY);
             
             // Draw buttons
             Rectangle startBtn = {SCREEN_WIDTH/2 - BUTTON_WIDTH/2, 300, BUTTON_WIDTH, BUTTON_HEIGHT};
@@ -223,23 +222,15 @@ void RenderGame(void) {
             
             DrawRectangleRec(startBtn, startColor);
             DrawRectangleLinesEx(startBtn, 2, UI_BORDER);
-            DrawTextEx(gameFont, "START GAME", 
-                      (Vector2){startBtn.x + (startBtn.width - MeasureTextEx(gameFont, "START GAME", FONT_SIZE_BUTTON, 1).x)/2, 
-                               startBtn.y + (startBtn.height - FONT_SIZE_BUTTON)/2}, 
-                      FONT_SIZE_BUTTON, 1, UI_TEXT_PRIMARY);
+            DrawCenteredText("START GAME", startBtn.x + startBtn.width/2, startBtn.y + startBtn.height/2, FONT_SIZE_BUTTON, UI_TEXT_PRIMARY);
             
             DrawRectangleRec(quitBtn, quitColor);
             DrawRectangleLinesEx(quitBtn, 2, UI_BORDER);
-            DrawTextEx(gameFont, "QUIT", 
-                      (Vector2){quitBtn.x + (quitBtn.width - MeasureTextEx(gameFont, "QUIT", FONT_SIZE_BUTTON, 1).x)/2, 
-                               quitBtn.y + (quitBtn.height - FONT_SIZE_BUTTON)/2}, 
-                      FONT_SIZE_BUTTON, 1, UI_TEXT_PRIMARY);
+            DrawCenteredText("QUIT", quitBtn.x + quitBtn.width/2, quitBtn.y + quitBtn.height/2, FONT_SIZE_BUTTON, UI_TEXT_PRIMARY);
             break;
             
         case STATE_ALGORITHM_SELECT:
-            DrawTextEx(gameFont, "SELECT ALGO", 
-                      (Vector2){SCREEN_WIDTH/2 - MeasureTextEx(gameFont, "SELECT ALGO", FONT_SIZE_TITLE, 2).x/2, 100}, 
-                      FONT_SIZE_TITLE, 2, UI_TEXT_PRIMARY);
+            DrawCenteredText("SELECT ALGO", SCREEN_WIDTH/2, 100, FONT_SIZE_TITLE, UI_TEXT_PRIMARY);
             
             // Draw algorithm buttons in 2x3 grid
             const char* algoNames[] = {"Bubble sort", "Selection sort", "Insertion sort", "Merge sort", "Quick sort"};
@@ -269,17 +260,14 @@ void RenderGame(void) {
                 
 
                 int fontSize = FONT_SIZE_BUTTON;
-                Vector2 textSize = MeasureTextEx(gameFont, algoNameUpper, fontSize, 1);
+                int textWidth = MeasureText(algoNameUpper, fontSize);
 
-                while (textSize.x > btn.width - 10 && fontSize > 10) {
+                while (textWidth > btn.width - 10 && fontSize > 10) {
                     fontSize--;
-                    textSize = MeasureTextEx(gameFont, algoNameUpper, fontSize, 1);
+                    textWidth = MeasureText(algoNameUpper, fontSize);
                 }
 
-                DrawTextEx(gameFont, algoNameUpper,
-                        (Vector2){btn.x + (btn.width - textSize.x)/2,
-                                    btn.y + (btn.height - fontSize)/2},
-                        fontSize, 1, UI_TEXT_PRIMARY);
+                DrawCenteredText(algoNameUpper, btn.x + btn.width/2, btn.y + btn.height/2, fontSize, UI_TEXT_PRIMARY);
                 // DrawTextEx(gameFont, algoNameUpper, 
                 //           (Vector2){btn.x + (btn.width - MeasureTextEx(gameFont, algoNameUpper, FONT_SIZE_BUTTON, 1).x)/2, 
                 //                    btn.y + (btn.height - FONT_SIZE_BUTTON)/2}, 
@@ -288,9 +276,7 @@ void RenderGame(void) {
             break;
             
         case STATE_LEVEL_SELECT:
-            DrawTextEx(gameFont, "SELECT LEVEL", 
-                      (Vector2){SCREEN_WIDTH/2 - MeasureTextEx(gameFont, "SELECT LEVEL", FONT_SIZE_TITLE, 2).x/2, 100}, 
-                      FONT_SIZE_TITLE, 2, UI_TEXT_PRIMARY);
+            DrawCenteredText("SELECT LEVEL", SCREEN_WIDTH/2, 100, FONT_SIZE_TITLE, UI_TEXT_PRIMARY);
             
             // Draw level buttons horizontally
             int levelStartX = SCREEN_WIDTH/2 - (MAX_LEVELS * 80 ) / 2;
@@ -304,17 +290,11 @@ void RenderGame(void) {
                 DrawRectangleLinesEx(btn, 2, UI_BORDER);
                 
                 if (i == 0) {
-                    DrawTextEx(gameFont, "?", 
-                              (Vector2){btn.x + (btn.width - MeasureTextEx(gameFont, "?", FONT_SIZE_BUTTON, 1).x)/2, 
-                                       btn.y + (btn.height - FONT_SIZE_BUTTON)/2}, 
-                              FONT_SIZE_BUTTON * 1.5, 1, UI_TEXT_PRIMARY);
+                    DrawCenteredText("?", btn.x + btn.width/2, btn.y + btn.height/2, FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
                 } else if (i <= MAX_LEVELS) {
                     char levelText[8];
                     sprintf(levelText, "%d", i);
-                    DrawTextEx(gameFont, levelText, 
-                              (Vector2){btn.x + (btn.width - MeasureTextEx(gameFont, levelText, FONT_SIZE_BUTTON, 1).x)/2, 
-                                       btn.y + (btn.height - FONT_SIZE_BUTTON)/2}, 
-                              FONT_SIZE_BUTTON * 1.5, 1, UI_TEXT_PRIMARY);
+                    DrawCenteredText(levelText, btn.x + btn.width/2, btn.y + btn.height/2, FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
                 }
             }
             break;
@@ -323,7 +303,7 @@ void RenderGame(void) {
             // Draw level info
             char levelText[32];
             sprintf(levelText, "LEVEL %d", game.selectedLevel + 1);
-            DrawTextEx(gameFont, levelText, (Vector2){20, 20}, FONT_SIZE_BODY * 2, 1, UI_TEXT_PRIMARY);
+            DrawText(levelText, 20, 20, FONT_SIZE_BODY * 2, UI_TEXT_PRIMARY);
             
             // Draw hearts
             const int heartSize = 30;
@@ -337,28 +317,24 @@ void RenderGame(void) {
                 }
             }
             
-            // Draw instructions
-            // DrawTextEx(gameFont,"instructions: Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor" , (Vector2){20, 60 * 1.25}, FONT_SIZE_SMALL * 2, 1, UI_TEXT_PRIMARY);
-
-            // DrawText("incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation", 
-            //         20, 80 * 1.25, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-            // DrawText("ullamco laboris nisi ut aliquip ex ea commodo consequat.", 
-            //         20, 100 * 1.25, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-            
-            // Draw platforms and array elements
+           
             for (int i = 0; i < game.arraySize; i++) {
                 DrawRectangleRec(game.platforms[i], UI_BUTTON_NORMAL);
-                DrawRectangleLinesEx(game.platforms[i], 2, UI_BORDER); // border
+                DrawRectangleLinesEx(game.platforms[i], 2, LIGHTGRAY); // border
                 
                 if (game.array[i] != 0) {
                     char numText[8];
                     sprintf(numText, "%d", game.array[i]);
+    
                     DrawCenteredText(numText, 
                                    game.platforms[i].x + game.platforms[i].width/2, 
                                    game.platforms[i].y + game.platforms[i].height/2 , 
                                    FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
                 }
             }
+
+             
+            
             
             // Draw player
             RenderPlayer(&game);
@@ -366,8 +342,12 @@ void RenderGame(void) {
             // Delegate additional rendering to algorithm
             AlgorithmFunctions* algo = GetAlgorithm(game.selectedAlgorithm);
             if (algo && algo->render) {
+                printf("DEBUG: calling %s update\n",
+                algorithmNames[game.selectedAlgorithm]);
                 algo->render(&game);
             }
+
+            
             break;
             
         case STATE_LEVEL_COMPLETE:

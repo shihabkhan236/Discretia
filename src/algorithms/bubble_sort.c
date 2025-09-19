@@ -1,3 +1,4 @@
+#include "bubble_sort.h"
 #include "algorithm.h"
 #include "../core/game.h"
 #include "../utils/colors.h"
@@ -24,59 +25,19 @@
 //     }
 //     return -1;
 // }
-// claude fix 
 static int GetPlayerPlatform(GameData* game) {
-    // Simple approach: check if player is overlapping with any platform
-    Rectangle playerRect = game->player;
-    
     for (int i = 0; i < game->arraySize; i++) {
         Rectangle platform = game->platforms[i];
-        
-        // Expand the platform detection area to make it easier to interact
-        Rectangle expandedPlatform = {
-            platform.x - 20,
-            platform.y - 20,
-            platform.width + 40,
-            platform.height + 40
-        };
-        
-        // Check if player rectangle overlaps with expanded platform
-        if (CheckCollisionRecs(playerRect, expandedPlatform)) {
-            printf("Player overlapping with platform %d (expanded area)\n", i);
+        // EXACT SAME COLLISION LOGIC AS PLAYER PHYSICS
+        if (game->player.y + game->player.height <= platform.y + 10 &&
+            game->player.y + game->player.height >= platform.y - 10 &&
+            game->player.x + game->player.width > platform.x + 8 && 
+            game->player.x < platform.x + platform.width - 8) {
+            printf("GetPlayerPlatform: Player is on platform %d\n", i);
             return i;
         }
     }
-    
-    // Fallback: find closest platform within reasonable distance
-    float closestDistance = 1000.0f;
-    int closestPlatform = -1;
-    
-    for (int i = 0; i < game->arraySize; i++) {
-        Rectangle platform = game->platforms[i];
-        
-        // Calculate distance between player center and platform center
-        float playerCenterX = game->player.x + game->player.width / 2.0f;
-        float playerCenterY = game->player.y + game->player.height / 2.0f;
-        float platformCenterX = platform.x + platform.width / 2.0f;
-        float platformCenterY = platform.y + platform.height / 2.0f;
-        
-        float dx = playerCenterX - platformCenterX;
-        float dy = playerCenterY - platformCenterY;
-        float distance = sqrt(dx * dx + dy * dy);
-        
-        if (distance < closestDistance) {
-            closestDistance = distance;
-            closestPlatform = i;
-        }
-    }
-    
-    // Only return if within interaction range (1.5 times box size)
-    if (closestDistance <= BOX_SIZE * 1.5f) {
-        printf("Closest platform: %d (distance: %.1f)\n", closestPlatform, closestDistance);
-        return closestPlatform;
-    }
-    
-    printf("No platform within interaction range (closest: %.1f)\n", closestDistance);
+    printf("GetPlayerPlatform: Player not on any platform\n");
     return -1;
 }
 
@@ -110,44 +71,63 @@ void BubbleSortInit(GameData* game) {
     printf("Bubble Sort initialized\n");
 }
 
+
 void BubbleSortUpdate(GameData* game) {
     BubbleSortData* data = (BubbleSortData*)game->algorithmData;
     if (!data) return;
+   
     
-    // Handle F key input for manual bubble sort interactions
+    // Test if this function is even being called
+    static int frameCount = 0;
+    frameCount++;
+    if (frameCount % 60 == 0) {  // Print every second
+        printf("BubbleSortUpdate called %d times\n", frameCount);
+    }
+    
+    // Check what key is being pressed (if any)
+    for (int key = 32; key < 127; key++) {  // Printable ASCII range
+        if (IsKeyPressed(key)) {
+            printf("*** KEY PRESSED: %d (char: %c) ***\n", key, key);
+        }
+    }
+    
+
+    
+    // Handle interaction key input for manual bubble sort interactions
+    // Using  F key 
     if (IsKeyPressed(KEY_F)) {
         int playerPlatform = GetPlayerPlatform(game);
         printf("F key pressed! Player platform: %d, Player pos: (%.1f, %.1f)\n", 
                playerPlatform, game->player.x, game->player.y);
         
-        // Validate player is on a platform and within array bounds
         if (playerPlatform >= 0 && playerPlatform < game->arraySize) {
             if (!game->carrying && game->array[playerPlatform] != 0) {
-                // Pick up number from box (matching reference code)
+                // Pick up number from box
                 game->playerNumber = game->array[playerPlatform];
                 game->array[playerPlatform] = 0;
                 game->carrying = true;
                 data->comparisons++;
-                printf("✓ Picked up number %d from platform %d\n", game->playerNumber, playerPlatform);
+                printf("✓ SUCCESS: Picked up number %d from platform %d\n", game->playerNumber, playerPlatform);
             } else if (game->carrying && game->array[playerPlatform] == 0) {
-                // Place number into empty box (matching reference code)
+                // Place number into empty box
                 game->array[playerPlatform] = game->playerNumber;
                 game->playerNumber = 0;
                 game->carrying = false;
-                printf("✓ Placed number %d on platform %d\n", game->array[playerPlatform], playerPlatform);
+                printf("✓ SUCCESS: Placed number %d on platform %d\n", game->array[playerPlatform], playerPlatform);
             } else if (game->carrying && game->array[playerPlatform] != 0) {
-                // Swap with existing number (matching reference code)
+                // Swap with existing number
                 int temp = game->array[playerPlatform];
                 game->array[playerPlatform] = game->playerNumber;
                 game->playerNumber = temp;
                 data->swaps++;
-                printf("✓ Swapped: platform %d now has %d, carrying %d\n", 
+                printf("✓ SUCCESS: Swapped! Platform %d now has %d, carrying %d\n", 
                        playerPlatform, game->array[playerPlatform], game->playerNumber);
             } else {
-                printf("✗ Cannot interact: carrying=%d, box_value=%d\n", game->carrying, game->array[playerPlatform]);
+                printf("✗ FAILED: Cannot interact - carrying=%d, platform_value=%d\n", 
+                       game->carrying, game->array[playerPlatform]);
             }
         } else {
-            printf("✗ Must be standing on a platform to interact (platform: %d)\n", playerPlatform);
+            printf("✗ FAILED: Player not on any platform (returned %d)\n", playerPlatform);
         }
     }
     
@@ -215,9 +195,9 @@ void BubbleSortRender(GameData* game) {
         char numText[16];
         sprintf(numText, "%d", game->playerNumber);
         
-        Vector2 textSize = MeasureTextEx(GetFontDefault(), numText, FONT_SIZE_BODY, 1);
-        int textX = game->player.x + (game->player.width - textSize.x) / 2;
-        int textY = game->player.y + (game->player.height - textSize.y) / 2;
+        int textWidth = MeasureText(numText, FONT_SIZE_BODY);
+        int textX = game->player.x + (game->player.width - textWidth) / 2;
+        int textY = game->player.y + (game->player.height - FONT_SIZE_BODY) / 2;
         DrawText(numText, textX, textY, FONT_SIZE_BODY, (Color){0, 0, 0, 255}); // Black text for visibility
     }
 }

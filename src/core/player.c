@@ -26,30 +26,27 @@ void UpdatePlayerMovement(GameData* game) {
     for (int i = 0; i < game->arraySize; i++) {
         Rectangle platform = game->platforms[i];
         
-        // Check if player is landing on top of platform
+        // Check if player is landing on top of platform (MATCH WORKING DEMO EXACTLY)
         if (game->player.y + game->player.height <= platform.y + GROUND_TOLERANCE &&
             game->player.y + game->player.height + game->velocity.y >= platform.y &&
-            // game->player.x + game->player.width > platform.x && 
-            // game->player.x < platform.x + platform.width
-            // OLD (too wide):
-            // game->player.x + game->player.width > platform.x && 
-            // game->player.x < platform.x + platform.width
-            // NEW (matches demo):
             game->player.x + game->player.width > platform.x + 8 && 
-            game->player.x < platform.x + platform.width - 8
-            ) {
+            game->player.x < platform.x + platform.width - 8) {
             
             game->player.y = platform.y - game->player.height;
             game->velocity.y = 0;
             game->isOnGround = true;
+            // printf("Player landed on platform %d\n", i);
             break;
         }
     }
+
+    
     
     // Jump input
     if ((IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) && game->isOnGround) {
         game->velocity.y = JUMP_FORCE;
         game->isOnGround = false;
+        printf("Player jumped\n");
     }
     
     // Screen boundaries
@@ -82,4 +79,23 @@ void RenderPlayer(GameData* game) {
     // Draw player
     DrawRectangleRec(game->player, playerColor);
     DrawRectangleLinesEx(game->player, 2, (Color){150, 170, 200, 255});
+
+
+
+     // Draw the number the player is carrying (using default font)
+    if (1 || game->carrying && game->playerNumber > 0) {
+        char numText[16] = "2";
+        sprintf(numText, "%d", game->playerNumber);
+        
+        // Calculate centered position using default font
+        int fontSize = 32;
+        int textWidth = MeasureText(numText, fontSize);
+        int textX = game->player.x + (game->player.width - textWidth) / 2;
+        int textY = game->player.y + (game->player.height - fontSize) / 2;
+        
+        
+        
+        // Draw the number in black
+        DrawText(numText, textX, textY, fontSize, BLACK);
+    }
 }

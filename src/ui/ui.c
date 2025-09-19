@@ -8,15 +8,9 @@
 Font gameFont = {0};
 
 void LoadGameFont(void) {
-    // Load the Mecha font
-    // gameFont = LoadFont("resources/sprite_fonts/alpha_beta.png");
+    // Using default font - no loading needed
     gameFont = GetFontDefault();
-    if (gameFont.texture.id == 0) {
-        TraceLog(LOG_WARNING, "Failed to load Mecha font, falling back to default font");
-        gameFont = GetFontDefault();
-    } else {
-        TraceLog(LOG_INFO, "Mecha font loaded successfully");
-    }
+    TraceLog(LOG_INFO, "Using default font");
 }
 
 void InitUI(void) {
@@ -24,22 +18,6 @@ void InitUI(void) {
     LoadGameFont();
 }
 
-void UpdateUI(void) {
-    // UI updates are handled in game.c for now
-    // This could be expanded for more complex UI interactions
-}
-
-void RenderUI(void) {
-    // UI rendering is handled in game.c for now
-    // This could be expanded for overlay UI elements
-}
-
-void CleanupUI(void) {
-    if (gameFont.texture.id != 0 && gameFont.texture.id != GetFontDefault().texture.id) {
-        UnloadFont(gameFont);
-    }
-    printf("UI system cleaned up\n");
-}
 
 Button CreateButton(Rectangle bounds, const char* text, void (*onClick)(void)) {
     Button button = {0};
@@ -88,13 +66,13 @@ void RenderButton(Button* button) {
     
     // Use smaller font size to prevent overflow
     int fontSize = FONT_SIZE_BUTTON;
-    Vector2 textSize = MeasureTextEx(gameFont, button->text, fontSize, 1);
+    int textWidth = MeasureText(button->text, fontSize);
     
     // If text is still too wide, use even smaller font
-    if (textSize.x > button->bounds.width - 10) {
+    if (textWidth > button->bounds.width - 10) {
         fontSize = FONT_SIZE_SMALL;
-        textSize = MeasureTextEx(gameFont, button->text, fontSize, 1);
-        if (textSize.x > button->bounds.width - 10) {
+        textWidth = MeasureText(button->text, fontSize);
+        if (textWidth > button->bounds.width - 10) {
             fontSize = 16;
         }
     }
@@ -108,9 +86,9 @@ bool IsButtonClicked(Button* button) {
 }
 
 Vector2 CenterText(const char* text, int fontSize, Rectangle bounds) {
-    Vector2 textSize = MeasureTextEx(gameFont, text, fontSize, 1);
-    Vector2 textPos = { bounds.x + (bounds.width - textSize.x) / 2,
-                    bounds.y + (bounds.height - textSize.y) / 2 };
+    int textWidth = MeasureText(text, fontSize);
+    Vector2 textPos = { bounds.x + (bounds.width - textWidth) / 2,
+                    bounds.y + (bounds.height - fontSize) / 2 };
     return textPos;
 }
 
@@ -124,22 +102,12 @@ Rectangle CenterRectangle(int width, int height, int screenWidth, int screenHeig
     return rect;
 }
 
-// void DrawCenteredText(const char* text, int x, int y, int fontSize, Color color) {
-//     Vector2 textSize = MeasureTextEx(gameFont, text, fontSize, 1);
-//     DrawTextEx(gameFont, text, (Vector2){x - textSize.x/2, y - textSize.y/2}, fontSize, 1, color);
-// }
-
 // 1. First, update your DrawCenteredText function in ui.c to handle float parameters:
 void DrawCenteredText(const char* text, float x, float y, int fontSize, Color color) {
-    Vector2 textSize = MeasureTextEx(gameFont, text, fontSize, 1);
-    float drawX = x - textSize.x / 2.0f;
-    float drawY = y - textSize.y / 2.0f;
+    int textWidth = MeasureText(text, fontSize);
     
-    // Debug output to see what's happening
-    printf("DrawCenteredText: text='%s', pos=(%.1f,%.1f), textSize=(%.1f,%.1f), drawPos=(%.1f,%.1f)\n", 
-           text, x, y, textSize.x, textSize.y, drawX, drawY);
-    
-    DrawTextEx(gameFont, text, (Vector2){drawX, drawY}, fontSize, 1, color);
+    // Actually use the calculated width to center the text
+    DrawText(text, x - textWidth/2, y - fontSize/2, fontSize, color);
 }
 
 void DrawButtonGrid(Button* buttons, int count, int columns, int startX, int startY) {

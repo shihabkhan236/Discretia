@@ -1,3 +1,4 @@
+#include "quick_sort.h"
 #include "algorithm.h"
 #include "../core/game.h"
 #include "../utils/colors.h"

@@ -5,46 +5,12 @@
 #include <time.h>
 #include <stdio.h>
 
-// Forward declarations for algorithm implementations
-// Bubble Sort
-void BubbleSortInit(GameData* game);
-void BubbleSortUpdate(GameData* game);
-void BubbleSortRender(GameData* game);
-void BubbleSortCleanup(GameData* game);
-bool BubbleSortIsComplete(GameData* game);
-void BubbleSortResetLevel(GameData* game, int level);
-
-// Selection Sort
-void SelectionSortInit(GameData* game);
-void SelectionSortUpdate(GameData* game);
-void SelectionSortRender(GameData* game);
-void SelectionSortCleanup(GameData* game);
-bool SelectionSortIsComplete(GameData* game);
-void SelectionSortResetLevel(GameData* game, int level);
-
-// Insertion Sort
-void InsertionSortInit(GameData* game);
-void InsertionSortUpdate(GameData* game);
-void InsertionSortRender(GameData* game);
-void InsertionSortCleanup(GameData* game);
-bool InsertionSortIsComplete(GameData* game);
-void InsertionSortResetLevel(GameData* game, int level);
-
-// Merge Sort
-void MergeSortInit(GameData* game);
-void MergeSortUpdate(GameData* game);
-void MergeSortRender(GameData* game);
-void MergeSortCleanup(GameData* game);
-bool MergeSortIsComplete(GameData* game);
-void MergeSortResetLevel(GameData* game, int level);
-
-// Quick Sort
-void QuickSortInit(GameData* game);
-void QuickSortUpdate(GameData* game);
-void QuickSortRender(GameData* game);
-void QuickSortCleanup(GameData* game);
-bool QuickSortIsComplete(GameData* game);
-void QuickSortResetLevel(GameData* game, int level);
+// Include algorithm headers
+#include "bubble_sort.h"
+#include "selection_sort.h"
+#include "insertion_sort.h"
+#include "merge_sort.h"
+#include "quick_sort.h"
 
 // Algorithm registry
 AlgorithmFunctions algorithmRegistry[MAX_ALGORITHMS] = {
@@ -104,6 +70,7 @@ const char* algorithmNames[MAX_ALGORITHMS] = {
     "Quick Sort"
 };
 
+// not used . just for checking 
 void InitAlgorithms(void) {
     srand((unsigned int)time(NULL));
     printf("Algorithms initialized\n");
@@ -111,6 +78,7 @@ void InitAlgorithms(void) {
 
 AlgorithmFunctions* GetAlgorithm(AlgorithmType type) {
     if (type >= 0 && type < MAX_ALGORITHMS) {
+        printf("ok Alhamdulillah %s\n", algorithmNames[type]);
         return &algorithmRegistry[type];
     }
     return NULL;
