@@ -9,7 +9,6 @@
 #include <math.h>
 
 
-
 // Helper function to get which platform player is on (-1 if none)
 // static int GetPlayerPlatform(GameData* game) {
 //     for (int i = 0; i < game->arraySize; i++) {
@@ -101,41 +100,73 @@ void BubbleSortUpdate(GameData* game) {
     // Handle interaction key input for manual bubble sort interactions
     // Using  F key 
     if (IsKeyPressed(KEY_F)) {
-        int playerPlatform = GetPlayerPlatform(game);
-        printf("F key pressed! Player platform: %d, Player pos: (%.1f, %.1f)\n", 
-               playerPlatform, game->player.x, game->player.y);
-        
-        if (playerPlatform >= 0 && playerPlatform < game->arraySize) {
-            if (!game->carrying && game->array[playerPlatform] != 0) {
-                // Pick up number from box
-                game->playerNumber = game->array[playerPlatform];
-                game->array[playerPlatform] = 0;
-                game->carrying = true;
-                data->comparisons++;
-                printf("✓ SUCCESS: Picked up number %d from platform %d\n", game->playerNumber, playerPlatform);
-            } else if (game->carrying && game->array[playerPlatform] == 0) {
-                // Place number into empty box
-                game->array[playerPlatform] = game->playerNumber;
-                game->playerNumber = 0;
-                game->carrying = false;
-                printf("✓ SUCCESS: Placed number %d on platform %d\n", game->array[playerPlatform], playerPlatform);
-            } else if (game->carrying && game->array[playerPlatform] != 0) {
-                // Swap with existing number
-                int temp = game->array[playerPlatform];
-                game->array[playerPlatform] = game->playerNumber;
-                game->playerNumber = temp;
-                data->swaps++;
-                printf("✓ SUCCESS: Swapped! Platform %d now has %d, carrying %d\n", 
-                       playerPlatform, game->array[playerPlatform], game->playerNumber);
-            } else {
-                printf("✗ FAILED: Cannot interact - carrying=%d, platform_value=%d\n", 
-                       game->carrying, game->array[playerPlatform]);
+        int onSquare = GetPlayerPlatform(game);          /* platform player stands on */
+        if (onSquare < 0) {                              /* not on any box → ignore */
+            printf("Not on a platform – nothing happens\n");
+            return;
+        }
+
+        /* ---- 1.  pick-up from current box --------------------------------- */
+        if (!game->carrying && game->array[onSquare] != 0) {
+            game->playerNumber = game->array[onSquare];
+            game->array[onSquare] = 0;
+            game->carrying = true;
+            data->comparisons++;
+            printf("Picked up %d from platform %d\n", game->playerNumber, onSquare);
+            return;
+        }
+
+        /* ---- 2.  place into empty current box ---------------------------- */
+        if (game->carrying && game->array[onSquare] == 0) {
+            game->array[onSquare] = game->playerNumber;
+            game->playerNumber = 0;
+            game->carrying = false;
+            printf("Placed %d on platform %d\n", game->array[onSquare], onSquare);
+            return;
+        }
+
+        /* ---- 3.  swap with adjacent box (ASCENDING order) ---------------- */
+        if (game->carrying && game->array[onSquare] != 0) {
+            /* find the empty box index once */
+            int emptyIndex = -1;
+            for (int i = 0; i < game->arraySize; ++i) {
+                if (game->array[i] == 0) { emptyIndex = i; break; }
             }
-        } else {
-            printf("✗ FAILED: Player not on any platform (returned %d)\n", playerPlatform);
+            if (emptyIndex == -1) {          /* no empty box → nothing to do */
+                printf("No empty box – cannot swap\n");
+                return;
+            }
+
+            /* adjacent check */
+            if (onSquare == emptyIndex - 1 || onSquare == emptyIndex + 1) {
+                int temp = game->array[onSquare];
+                bool correct = false;
+
+                if (emptyIndex > onSquare) {          /* swapping right */
+                    if (game->playerNumber < game->array[onSquare]) correct = true;
+                } else {                                /* swapping left */
+                    if (game->playerNumber > game->array[onSquare]) correct = true;
+                }
+
+                if (correct) {
+                    game->array[onSquare] = game->playerNumber;
+                    game->playerNumber = temp;
+                    data->swaps++;
+                    printf("Adjacent swap – correct (ascending)\n");
+                } else {
+                    /* wrong swap */
+                    game->hearts--;
+                    printf("Adjacent swap – WRONG (ascending), hearts left: %d\n", game->hearts);
+                    if (game->hearts <= 0) ChangeState(STATE_GAME_OVER);
+                }
+            } else {
+                printf("Not adjacent – swap refused\n");
+            }
         }
     }
-    
+
+
+   
     // Update sorted portion tracking
     data->sortedUpTo = -1;
     for (int i = 0; i < game->arraySize - 1; i++) {
