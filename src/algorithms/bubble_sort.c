@@ -3,12 +3,12 @@
 #include "../core/game.h"
 #include "../utils/colors.h"
 #include "../ui/ui.h"
+#include "../core/player.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 
-// Bubble Sort specific constants
-#define INTERACTION_RANGE 10  // Pixels within platform to allow interaction
+
 
 // Helper function to get which platform player is on (-1 if none)
 // static int GetPlayerPlatform(GameData* game) {
@@ -25,32 +25,43 @@
 //     }
 //     return -1;
 // }
+// static int GetPlayerPlatform(GameData* game) {
+//     for (int i = 0; i < game->arraySize; i++) {
+//         Rectangle platform = game->platforms[i];
+//         // EXACT SAME COLLISION LOGIC AS PLAYER PHYSICS
+//         if (game->player.y + game->player.height <= platform.y + 10 &&
+//             game->player.y + game->player.height >= platform.y - 10 &&
+//             game->player.x + game->player.width > platform.x + 8 && 
+//             game->player.x < platform.x + platform.width - 8) {
+//             printf("GetPlayerPlatform: Player is on platform %d\n", i);
+//             return i;
+//         }
+//     }
+//     printf("GetPlayerPlatform: Player not on any platform\n");
+//     return -1;
+// }
+
 static int GetPlayerPlatform(GameData* game) {
     for (int i = 0; i < game->arraySize; i++) {
         Rectangle platform = game->platforms[i];
-        // EXACT SAME COLLISION LOGIC AS PLAYER PHYSICS
-        if (game->player.y + game->player.height <= platform.y + 10 &&
-            game->player.y + game->player.height >= platform.y - 10 &&
+        
+        // Check if player is landing on top of platform (MATCH WORKING DEMO EXACTLY)
+        if (game->player.y + game->player.height <= platform.y + GROUND_TOLERANCE &&
+            game->player.y + game->player.height + game->velocity.y >= platform.y &&
             game->player.x + game->player.width > platform.x + 8 && 
             game->player.x < platform.x + platform.width - 8) {
-            printf("GetPlayerPlatform: Player is on platform %d\n", i);
+            
+            game->player.y = platform.y - game->player.height;
+            game->velocity.y = 0;
+            game->isOnGround = true;
+            // printf("Player landed on platform %d\n", i);
             return i;
         }
     }
-    printf("GetPlayerPlatform: Player not on any platform\n");
+
     return -1;
 }
 
-// Bubble Sort specific data
-typedef struct {
-    int currentI;        // Current outer loop index (for tracking progress)
-    int currentJ;        // Current inner loop index (for tracking progress)
-    bool comparing;      // Whether currently in comparison state
-    bool swapping;       // Whether currently performing a swap
-    int comparisons;     // Total number of comparisons made
-    int swaps;          // Total number of swaps performed
-    int sortedUpTo;     // Index up to which array is sorted (for visual feedback)
-} BubbleSortData;
 
 void BubbleSortInit(GameData* game) {
     BubbleSortData* data = (BubbleSortData*)malloc(sizeof(BubbleSortData));
@@ -77,22 +88,16 @@ void BubbleSortUpdate(GameData* game) {
     if (!data) return;
    
     
-    // Test if this function is even being called
-    static int frameCount = 0;
-    frameCount++;
-    if (frameCount % 60 == 0) {  // Print every second
-        printf("BubbleSortUpdate called %d times\n", frameCount);
-    }
-    
-    // Check what key is being pressed (if any)
-    for (int key = 32; key < 127; key++) {  // Printable ASCII range
-        if (IsKeyPressed(key)) {
-            printf("*** KEY PRESSED: %d (char: %c) ***\n", key, key);
-        }
-    }
+  
+    // Check what key is being pressed (if any) helper func
+    // for (int key = 32; key < 127; key++) {  // Printable ASCII range
+    //     if (IsKeyPressed(key)) {
+    //         printf("*** KEY PRESSED: %d (char: %c) ***\n", key, key);
+    //     }
+    // }
     
 
-    
+   
     // Handle interaction key input for manual bubble sort interactions
     // Using  F key 
     if (IsKeyPressed(KEY_F)) {
@@ -182,6 +187,7 @@ void BubbleSortRender(GameData* game) {
     
     // Highlight current player platform if they can interact
     int playerPlatform = GetPlayerPlatform(game);
+    // printf("platform:  %d\n", playerPlatform);
     if (playerPlatform >= 0) {
         Color highlightColor = GAME_HIGHLIGHT;
         if (game->carrying && game->array[playerPlatform] != 0) {

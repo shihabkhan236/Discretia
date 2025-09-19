@@ -1,12 +1,10 @@
 #include "game.h"
 #include "raylib.h"
+#include "player.h"
 #include <stdio.h>
 
-// Player movement constants
-#define GRAVITY 0.6f
-#define JUMP_FORCE -12.0f
-#define MOVE_SPEED 5.0f
-#define GROUND_TOLERANCE 10.0f
+
+
 
 void UpdatePlayerMovement(GameData* game) {
     // Horizontal movement
@@ -83,8 +81,8 @@ void RenderPlayer(GameData* game) {
 
 
      // Draw the number the player is carrying (using default font)
-    if (1 || game->carrying && game->playerNumber > 0) {
-        char numText[16] = "2";
+    if (game->carrying && game->playerNumber > 0) {
+        char numText[16];
         sprintf(numText, "%d", game->playerNumber);
         
         // Calculate centered position using default font

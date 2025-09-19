@@ -3,6 +3,19 @@
 
 #include "../core/game.h"
 
+// Bubble Sort specific constants
+#define INTERACTION_RANGE 10  // Pixels within platform to allow interaction
+// Bubble Sort specific data
+typedef struct {
+    int currentI;        // Current outer loop index (for tracking progress)
+    int currentJ;        // Current inner loop index (for tracking progress)
+    bool comparing;      // Whether currently in comparison state
+    bool swapping;       // Whether currently performing a swap
+    int comparisons;     // Total number of comparisons made
+    int swaps;          // Total number of swaps performed
+    int sortedUpTo;     // Index up to which array is sorted (for visual feedback)
+} BubbleSortData;
+
 // Bubble Sort function declarations
 void BubbleSortInit(GameData* game);
 void BubbleSortUpdate(GameData* game);

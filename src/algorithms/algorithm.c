@@ -78,7 +78,6 @@ void InitAlgorithms(void) {
 
 AlgorithmFunctions* GetAlgorithm(AlgorithmType type) {
     if (type >= 0 && type < MAX_ALGORITHMS) {
-        printf("ok Alhamdulillah %s\n", algorithmNames[type]);
         return &algorithmRegistry[type];
     }
     return NULL;

@@ -159,6 +159,7 @@ void UpdateGame(void) {
             // Handle gameplay - delegate to algorithm
             AlgorithmFunctions* algo = GetAlgorithm(game.selectedAlgorithm);
             if (algo && algo->update) {
+                
                 algo->update(&game);
             }
             
@@ -342,9 +343,11 @@ void RenderGame(void) {
             // Delegate additional rendering to algorithm
             AlgorithmFunctions* algo = GetAlgorithm(game.selectedAlgorithm);
             if (algo && algo->render) {
-                printf("DEBUG: calling %s update\n",
-                algorithmNames[game.selectedAlgorithm]);
                 algo->render(&game);
+            }
+
+            if(algo && algo->update){
+                algo->update(&game);
             }
 
             
@@ -368,17 +371,17 @@ void RenderGame(void) {
 }
 
 void CleanupGame(void) {
+    // Cleanup algorithm-specific data
+    AlgorithmFunctions* algo = GetAlgorithm(game.selectedAlgorithm);
+    if (algo && algo->cleanup) algo->cleanup(&game);
+
     // Clean up heart texture if it was loaded
     if (heartTexture.id > 0) {
         UnloadTexture(heartTexture);
         heartTexture = (Texture2D){0};
     }
     
-    // Cleanup algorithm-specific data
-    AlgorithmFunctions* algo = GetAlgorithm(game.selectedAlgorithm);
-    if (algo && algo->cleanup) {
-        algo->cleanup(&game);
-    }
+ 
     
     printf("Game cleaned up successfully\n");
 }
@@ -397,12 +400,15 @@ void ResetLevel(void) {
     game.score = 0;
     game.gameComplete = false;
     
-    // Reset algorithm-specific data
-    AlgorithmFunctions* algo = GetAlgorithm(game.selectedAlgorithm);
-    if (algo && algo->resetLevel) {
-        algo->resetLevel(&game, game.selectedLevel);
-    }
-    
+    /* 1.  free previous algorithm memory (if any) ---------------------- */
+    AlgorithmFunctions *algo = GetAlgorithm(game.selectedAlgorithm);
+    if (algo && algo->cleanup) algo->cleanup(&game);
+
+    /* 2.  allocate / initialise new algorithm data --------------------- */
+    if (algo && algo->init) algo->init(&game);
+
+    /* 3.  let the algorithm set up the level array --------------------- */
+    if (algo && algo->resetLevel) algo->resetLevel(&game, game.selectedLevel);
     // Recalculate box positions after array size might have changed
     CalculateBoxPositions(game.platforms, game.arraySize);
     
