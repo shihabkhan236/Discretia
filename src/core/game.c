@@ -283,7 +283,7 @@ void RenderGame(void) {
             int levelStartX = SCREEN_WIDTH/2 - (MAX_LEVELS * 80 ) / 2;
             int levelY = 250;
             
-            for (int i = 0; i <= MAX_LEVELS; i++) {
+            for (int i = 0; i < MAX_LEVELS; i++) {
                 Rectangle btn = {levelStartX + i * 70, levelY, 70, 70};
                 Color btnColor = (game.selectedButton == i) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
                 
@@ -332,10 +332,7 @@ void RenderGame(void) {
                                    game.platforms[i].y + game.platforms[i].height/2 , 
                                    FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
                 }
-            }
-
-             
-            
+            }     
             
             // Draw player
             RenderPlayer(&game);

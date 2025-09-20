@@ -13,7 +13,7 @@ typedef struct {
     bool swapping;       // Whether currently performing a swap
     int comparisons;     // Total number of comparisons made
     int swaps;          // Total number of swaps performed
-    int sortedUpTo;     // Index up to which array is sorted (for visual feedback)
+
 } BubbleSortData;
 
 // Bubble Sort function declarations

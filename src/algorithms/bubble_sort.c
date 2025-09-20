@@ -9,36 +9,6 @@
 #include <math.h>
 
 
-// Helper function to get which platform player is on (-1 if none)
-// static int GetPlayerPlatform(GameData* game) {
-//     for (int i = 0; i < game->arraySize; i++) {
-//         Rectangle platform = game->platforms[i];
-//         // Check if player is standing on platform (matching reference code logic)
-//         if (game->player.y + game->player.height <= platform.y + 10 &&
-//             game->player.y + game->player.height >= platform.y - 10 &&
-//             game->player.x + game->player.width > platform.x + 8 && 
-//             game->player.x < platform.x + platform.width - 8 &&
-//             game->isOnGround) {
-//             return i;
-//         }
-//     }
-//     return -1;
-// }
-// static int GetPlayerPlatform(GameData* game) {
-//     for (int i = 0; i < game->arraySize; i++) {
-//         Rectangle platform = game->platforms[i];
-//         // EXACT SAME COLLISION LOGIC AS PLAYER PHYSICS
-//         if (game->player.y + game->player.height <= platform.y + 10 &&
-//             game->player.y + game->player.height >= platform.y - 10 &&
-//             game->player.x + game->player.width > platform.x + 8 && 
-//             game->player.x < platform.x + platform.width - 8) {
-//             printf("GetPlayerPlatform: Player is on platform %d\n", i);
-//             return i;
-//         }
-//     }
-//     printf("GetPlayerPlatform: Player not on any platform\n");
-//     return -1;
-// }
 
 static int GetPlayerPlatform(GameData* game) {
     for (int i = 0; i < game->arraySize; i++) {
@@ -75,7 +45,7 @@ void BubbleSortInit(GameData* game) {
     data->swapping = false;
     data->comparisons = 0;
     data->swaps = 0;
-    data->sortedUpTo = -1;  // No elements sorted initially
+ 
     
     game->algorithmData = data;
     printf("Bubble Sort initialized\n");
@@ -86,16 +56,6 @@ void BubbleSortUpdate(GameData* game) {
     BubbleSortData* data = (BubbleSortData*)game->algorithmData;
     if (!data) return;
    
-    
-  
-    // Check what key is being pressed (if any) helper func
-    // for (int key = 32; key < 127; key++) {  // Printable ASCII range
-    //     if (IsKeyPressed(key)) {
-    //         printf("*** KEY PRESSED: %d (char: %c) ***\n", key, key);
-    //     }
-    // }
-    
-
    
     // Handle interaction key input for manual bubble sort interactions
     // Using  F key 
@@ -165,18 +125,11 @@ void BubbleSortUpdate(GameData* game) {
         }
     }
 
+   
+
 
    
-    // Update sorted portion tracking
-    data->sortedUpTo = -1;
-    for (int i = 0; i < game->arraySize - 1; i++) {
-        if (game->array[i] != 0 && game->array[i+1] != 0 && game->array[i] <= game->array[i+1]) {
-            data->sortedUpTo = i;
-        } else {
-            break;
-        }
-    }
-    
+  
     // Check for completion - all elements must be in ascending order and no empty boxes
     bool allFilled = true;
     for (int i = 0; i < game->arraySize; i++) {
@@ -209,12 +162,20 @@ void BubbleSortRender(GameData* game) {
         DrawText("Goal: Sort numbers in ascending order (1, 2, 3, 4...)", 20, 160, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
     }
     
-    // Highlight sorted portion in light green
-    for (int i = 0; i <= data->sortedUpTo; i++) {
-        if (i < game->arraySize && game->array[i] != 0) {
-            DrawRectangleLinesEx(game->platforms[i], 3, GAME_SORTED);
+    // Highlight sorted portion in light green when toggled by pressing H
+    /* ---------- build target ascending array (1..N) ---------- */
+    if (IsKeyDown(KEY_H)) {
+           int target[MAX_ARRAY_SIZE];
+        for (int i = 0; i < game->arraySize; ++i) target[i] = i + 1;
+
+        /* ---------- mark boxes that are already in final place --- */
+        for (int i = 0; i < game->arraySize; ++i) {
+            if (game->array[i] != 0 && game->array[i] == target[i]) {
+                DrawRectangleLinesEx(game->platforms[i], 3, GAME_SORTED);
+            }
         }
     }
+ 
     
     // Highlight current player platform if they can interact
     int playerPlatform = GetPlayerPlatform(game);
@@ -273,7 +234,7 @@ void BubbleSortResetLevel(GameData* game, int level) {
         data->swapping = false;
         data->comparisons = 0;
         data->swaps = 0;
-        data->sortedUpTo = -1;
+        
     }
     
     // Reset player carrying state
