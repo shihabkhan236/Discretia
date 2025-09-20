@@ -1,6 +1,7 @@
 #include "game.h"
 #include "raylib.h"
 #include "player.h"
+#include "../ui/ui.h"
 #include <stdio.h>
 
 
