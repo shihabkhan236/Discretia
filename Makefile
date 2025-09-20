@@ -1,6 +1,20 @@
+# Detect operating system
+UNAME_S := $(shell uname -s)
+
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -O2
-LIBS = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+CFLAGS = -Wall -Wextra -std=c99 -O2 $(INCLUDES)
+
+# Platform-specific libraries and include paths
+ifeq ($(UNAME_S),Linux)
+    LIBS = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+    INCLUDES = 
+endif
+ifeq ($(UNAME_S),Darwin)
+    LIBS = -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo
+    RAYLIB_PATH = $(shell brew --prefix raylib)
+    INCLUDES = -I$(RAYLIB_PATH)/include
+    LIBS += -L$(RAYLIB_PATH)/lib
+endif
 
 # Source directories
 SRC_DIR = src
@@ -29,7 +43,7 @@ TARGET = discretia
 TEST_TARGET = test_bubble_sort
 TEST_SOURCES = $(TEST_DIR)/bubble_sort_test.c $(ALGO_SOURCES) $(UTILS_SOURCES)
 
-.PHONY: all clean test
+.PHONY: all clean test platform-info
 
 all: $(TARGET)
 
@@ -79,6 +93,22 @@ run: $(TARGET)
 
 install-deps:
 	@echo "Installing raylib dependencies..."
+ifeq ($(UNAME_S),Linux)
+	@echo "Detected Linux - using apt-get"
 	sudo apt-get update
 	sudo apt-get install -y build-essential git cmake
 	sudo apt-get install -y libasound2-dev mesa-common-dev libx11-dev libxrandr-dev libxi-dev xorg-dev libgl1-mesa-dev libglu1-mesa-dev
+endif
+ifeq ($(UNAME_S),Darwin)
+	@echo "Detected macOS - using Homebrew"
+	@if ! command -v brew >/dev/null 2>&1; then \
+		echo "Homebrew not found. Please install Homebrew first:"; \
+		echo "/bin/bash -c \"\$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""; \
+	else \
+		brew install raylib; \
+	fi
+endif
+
+platform-info:
+	@echo "Detected platform: $(UNAME_S)"
+	@echo "Using libraries: $(LIBS)"
