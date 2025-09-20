@@ -33,6 +33,26 @@ void CalculateBoxPositions(Rectangle* platforms, int arraySize) {
     }
 }
 
+
+int GetPlayerPlatform(GameData* game) {
+    for (int i = 0; i < game->arraySize; i++) {
+        Rectangle platform = game->platforms[i];
+        
+        // Check if player is landing on top of platform (MATCH WORKING DEMO EXACTLY)
+        if (game->player.y + game->player.height <= platform.y + GROUND_TOLERANCE &&
+            game->player.y + game->player.height + game->velocity.y >= platform.y &&
+            game->player.x + game->player.width > platform.x + 8 && 
+            game->player.x < platform.x + platform.width - 8) {
+            
+            game->player.y = platform.y - game->player.height;
+            game->velocity.y = 0;
+            game->isOnGround = true;
+            return i;
+        }
+    }
+    return -1;
+}
+
 void InitGame(void) {
     // Initialize game state
     game.currentState = STATE_MAIN_MENU;

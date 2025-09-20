@@ -108,4 +108,7 @@ void ResetLevel(void);
 // Layout functions
 void CalculateBoxPositions(Rectangle* platforms, int arraySize);
 
+//find the platform player is on
+int GetPlayerPlatform(GameData* game);
+
 #endif // GAME_H

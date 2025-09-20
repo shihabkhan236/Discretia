@@ -10,26 +10,7 @@
 
 
 
-static int GetPlayerPlatform(GameData* game) {
-    for (int i = 0; i < game->arraySize; i++) {
-        Rectangle platform = game->platforms[i];
-        
-        // Check if player is landing on top of platform (MATCH WORKING DEMO EXACTLY)
-        if (game->player.y + game->player.height <= platform.y + GROUND_TOLERANCE &&
-            game->player.y + game->player.height + game->velocity.y >= platform.y &&
-            game->player.x + game->player.width > platform.x + 8 && 
-            game->player.x < platform.x + platform.width - 8) {
-            
-            game->player.y = platform.y - game->player.height;
-            game->velocity.y = 0;
-            game->isOnGround = true;
-            // printf("Player landed on platform %d\n", i);
-            return i;
-        }
-    }
 
-    return -1;
-}
 
 
 void BubbleSortInit(GameData* game) {
@@ -188,16 +169,7 @@ void BubbleSortRender(GameData* game) {
         DrawRectangleLinesEx(game->platforms[playerPlatform], 2, highlightColor);
     }
     
-    // Draw carried number on player character (properly centered)
-    if (game->carrying && game->playerNumber > 0) {
-        char numText[16];
-        sprintf(numText, "%d", game->playerNumber);
-        
-        int textWidth = MeasureText(numText, FONT_SIZE_BODY);
-        int textX = game->player.x + (game->player.width - textWidth) / 2;
-        int textY = game->player.y + (game->player.height - FONT_SIZE_BODY) / 2;
-        DrawText(numText, textX, textY, FONT_SIZE_BODY, (Color){0, 0, 0, 255}); // Black text for visibility
-    }
+    
 }
 
 void BubbleSortCleanup(GameData* game) {

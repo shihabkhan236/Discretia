@@ -87,11 +87,13 @@ void RenderPlayer(GameData* game) {
         sprintf(numText, "%d", game->playerNumber);
         
         // Calculate centered position using default font
-        int fontSize = 128;
+        int fontSize = 32;
         int textWidth = MeasureText(numText, fontSize);
         int textX = game->player.x + (game->player.width - textWidth) / 2;
         int textY = game->player.y + (game->player.height - fontSize) / 2;
-        DrawCenteredText(numText, textX, textY, fontSize, BLACK);
+
+        DrawText(numText, textX, textY, fontSize, BLACK);
+        // DrawCenteredText(numText, textX, textY, fontSize, BLACK);
         
         
     }
