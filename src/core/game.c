@@ -16,7 +16,20 @@ GameData game = {0};
 // Heart texture
 static Texture2D heartTexture = {0};
 
-
+void UpdateGameCamera(GameData* game) {
+    float deltaTime = GetFrameTime();
+    Vector2 playerCenter = { game->player.x + game->player.width/2, 
+                            game->player.y + game->player.height/2 };
+    
+    // Simple center follow (start with this)
+    game->camera.target = playerCenter;
+    game->camera.offset = (Vector2){ SCREEN_WIDTH/2.0f, SCREEN_HEIGHT/2.0f };
+    
+    // Optional: Add zoom control
+    game->camera.zoom += ((float)GetMouseWheelMove() * 0.05f);
+    if (game->camera.zoom > 3.0f) game->camera.zoom = 3.0f;
+    else if (game->camera.zoom < 0.25f) game->camera.zoom = 0.25f;
+}
 
 // Function to calculate centered, contiguous box positions
 void CalculateBoxPositions(Rectangle* platforms, int arraySize) {
@@ -69,6 +82,15 @@ void InitGame(void) {
         heartTexture = LoadTextureFromImage(heartImg);
         UnloadImage(heartImg);
     }
+
+     // Initialize camera
+    game.camera = (Camera2D){ 0 };
+    game.camera.target = (Vector2){ game.player.x + game.player.width/2, 
+                                   game.player.y + game.player.height/2 };
+    game.camera.offset = (Vector2){ SCREEN_WIDTH/2.0f, SCREEN_HEIGHT/2.0f };
+    game.camera.rotation = 0.0f;
+    game.camera.zoom = 1.0f;
+    game.cameraMode = 0;
     
     // Initialize game data
     game.selectedAlgorithm = ALGO_BUBBLE_SORT;
@@ -174,6 +196,9 @@ void UpdateGame(void) {
         case STATE_GAMEPLAY:
             // Update player movement and physics
             UpdatePlayerMovement(&game);
+
+            // Add camera update
+            UpdateGameCamera(&game);
 
           
             // Handle gameplay - delegate to algorithm
@@ -337,8 +362,13 @@ void RenderGame(void) {
                     DrawRectangle(SCREEN_WIDTH - 100 + i * heartSpacing, 20, heartSize, heartSize, RED);
                 }
             }
+
             
+            // Start camera mode for world objects
+            BeginMode2D(game.camera);
            
+
+            // Draw platforms
             for (int i = 0; i < game.arraySize; i++) {
                 DrawRectangleRec(game.platforms[i], UI_BUTTON_NORMAL);
                 DrawRectangleLinesEx(game.platforms[i], 2, LIGHTGRAY); // border
@@ -363,7 +393,8 @@ void RenderGame(void) {
                 algo->render(&game);
             }
 
-           
+           // End camera mode
+            EndMode2D();
 
             
             break;

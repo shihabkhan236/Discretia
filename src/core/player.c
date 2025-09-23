@@ -8,6 +8,11 @@
 
 
 void UpdatePlayerMovement(GameData* game) {
+
+     // Convert Rectangle to Vector2 for camera compatibility
+    Vector2 playerPos = { game->player.x + game->player.width/2, 
+                         game->player.y + game->player.height/2 };
+                         
     // Horizontal movement
     if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)) {
         game->player.x -= MOVE_SPEED;

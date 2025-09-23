@@ -11,7 +11,7 @@
 // Game constants
 #define MAX_ALGORITHMS 5
 #define MAX_LEVELS 5
-#define MAX_ARRAY_SIZE 8
+#define MAX_ARRAY_SIZE 20
 #define MAX_HEARTS 3
 
 #define BOX_SIZE 64
@@ -90,10 +90,18 @@ struct GameData {
     // UI state
     int selectedButton;
     bool buttonPressed;
+
+     // Add camera
+    Camera2D camera;
+        int cameraMode;  // For switching between camera types
+
 };
 
 // Global game instance
 extern GameData game;
+
+// camera 
+void UpdateGameCamera(GameData* game);
 
 // Core functions
 void InitGame(void);
