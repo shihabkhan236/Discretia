@@ -2,6 +2,7 @@
 #include "raylib.h"
 #include "player.h"
 #include "../ui/ui.h"
+#include "../algorithms/merge_sort.h"
 #include <stdio.h>
 
 
@@ -27,6 +28,8 @@ void UpdatePlayerMovement(GameData* game) {
     
     // Platform collision detection
     game->isOnGround = false;
+    
+    // Check original platforms first
     for (int i = 0; i < game->arraySize; i++) {
         Rectangle platform = game->platforms[i];
         
@@ -43,6 +46,11 @@ void UpdatePlayerMovement(GameData* game) {
             break;
         }
     }
+    
+    // If not on original platforms, check algorithm-specific platforms
+    if (!game->isOnGround && game->selectedAlgorithm == ALGO_MERGE_SORT) {
+        MergeSortGetPlayerPlatform(game);
+    }
 
     
     
@@ -53,13 +61,7 @@ void UpdatePlayerMovement(GameData* game) {
         printf("Player jumped\n");
     }
     
-    // Screen boundaries
-    if (game->player.x < 0) {
-        game->player.x = 0;
-    }
-    if (game->player.x + game->player.width > SCREEN_WIDTH) {
-        game->player.x = SCREEN_WIDTH - game->player.width;
-    }
+
     
     // Fall off screen - respawn and lose heart
     if (game->player.y > SCREEN_HEIGHT) {
