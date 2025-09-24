@@ -17,15 +17,45 @@ GameData game = {0};
 static Texture2D heartTexture = {0};
 
 void UpdateGameCamera(GameData* game) {
-    float deltaTime = GetFrameTime();
+    static float evenOutSpeed = 700;
+    static bool eveningOut = false;
+    static float evenOutTarget;
+    
     Vector2 playerCenter = { game->player.x + game->player.width/2, 
                             game->player.y + game->player.height/2 };
-    
-    // Simple center follow (start with this)
-    game->camera.target = playerCenter;
+    float deltaTime = GetFrameTime();
+
     game->camera.offset = (Vector2){ SCREEN_WIDTH/2.0f, SCREEN_HEIGHT/2.0f };
-    
-    // Optional: Add zoom control
+    game->camera.target.x = playerCenter.x; // Always follow player horizontally
+
+    if (eveningOut) {
+        // Currently smoothing camera to target Y position
+        if (evenOutTarget > game->camera.target.y) {
+            game->camera.target.y += evenOutSpeed * deltaTime;
+            if (game->camera.target.y > evenOutTarget) {
+                game->camera.target.y = evenOutTarget;
+                eveningOut = false;
+            }
+        }
+        else {
+            game->camera.target.y -= evenOutSpeed * deltaTime;
+            if (game->camera.target.y < evenOutTarget) {
+                game->camera.target.y = evenOutTarget;
+                eveningOut = false;
+            }
+        }
+    }
+    else {
+        // Check if player has landed and Y position is different from camera
+        if (game->isOnGround && 
+            (game->velocity.y == 0) && 
+            (playerCenter.y != game->camera.target.y)) {
+            eveningOut = true;
+            evenOutTarget = playerCenter.y;
+        }
+    }
+
+    // Zoom control
     game->camera.zoom += ((float)GetMouseWheelMove() * 0.05f);
     if (game->camera.zoom > 3.0f) game->camera.zoom = 3.0f;
     else if (game->camera.zoom < 0.25f) game->camera.zoom = 0.25f;
