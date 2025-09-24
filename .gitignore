@@ -5,3 +5,6 @@ old
 discretia
 *.md
 *.o
+
+# YoYo AI version control directory
+.yoyo/
