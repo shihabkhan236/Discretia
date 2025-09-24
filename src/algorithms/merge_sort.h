@@ -11,4 +11,7 @@ void MergeSortCleanup(GameData *game);
 bool MergeSortIsComplete(GameData *game);
 void MergeSortResetLevel(GameData *game, int level);
 
+// Additional collision detection for subarrays
+int MergeSortGetPlayerPlatform(GameData *game);
+
 #endif // MERGE_SORT_H
