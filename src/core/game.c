@@ -3,6 +3,7 @@
 #include "../utils/colors.h"
 #include "../ui/ui.h"
 #include "../algorithms/algorithm.h"
+#include "../algorithms/quick_sort.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,40 +17,48 @@ GameData game = {0};
 // Heart texture
 static Texture2D heartTexture = {0};
 
-void UpdateGameCamera(GameData* game) {
+void UpdateGameCamera(GameData *game)
+{
     static float evenOutSpeed = 700;
     static bool eveningOut = false;
     static float evenOutTarget;
-    
-    Vector2 playerCenter = { game->player.x + game->player.width/2, 
-                            game->player.y + game->player.height/2 };
+
+    Vector2 playerCenter = {game->player.x + game->player.width / 2,
+                            game->player.y + game->player.height / 2};
     float deltaTime = GetFrameTime();
 
-    game->camera.offset = (Vector2){ SCREEN_WIDTH/2.0f, SCREEN_HEIGHT/2.0f };
+    game->camera.offset = (Vector2){SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f};
     game->camera.target.x = playerCenter.x; // Always follow player horizontally
 
-    if (eveningOut) {
+    if (eveningOut)
+    {
         // Currently smoothing camera to target Y position
-        if (evenOutTarget > game->camera.target.y) {
+        if (evenOutTarget > game->camera.target.y)
+        {
             game->camera.target.y += evenOutSpeed * deltaTime;
-            if (game->camera.target.y > evenOutTarget) {
+            if (game->camera.target.y > evenOutTarget)
+            {
                 game->camera.target.y = evenOutTarget;
                 eveningOut = false;
             }
         }
-        else {
+        else
+        {
             game->camera.target.y -= evenOutSpeed * deltaTime;
-            if (game->camera.target.y < evenOutTarget) {
+            if (game->camera.target.y < evenOutTarget)
+            {
                 game->camera.target.y = evenOutTarget;
                 eveningOut = false;
             }
         }
     }
-    else {
+    else
+    {
         // Check if player has landed and Y position is different from camera
-        if (game->isOnGround && 
-            (game->velocity.y == 0) && 
-            (playerCenter.y != game->camera.target.y)) {
+        if (game->isOnGround &&
+            (game->velocity.y == 0) &&
+            (playerCenter.y != game->camera.target.y))
+        {
             eveningOut = true;
             evenOutTarget = playerCenter.y;
         }
@@ -57,36 +66,111 @@ void UpdateGameCamera(GameData* game) {
 
     // Zoom control
     game->camera.zoom += ((float)GetMouseWheelMove() * 0.05f);
-    if (game->camera.zoom > 3.0f) game->camera.zoom = 3.0f;
-    else if (game->camera.zoom < 0.25f) game->camera.zoom = 0.25f;
+    if (game->camera.zoom > 3.0f)
+        game->camera.zoom = 3.0f;
+    else if (game->camera.zoom < 0.25f)
+        game->camera.zoom = 0.25f;
 }
 
 // Function to calculate centered, contiguous box positions
-void CalculateBoxPositions(Rectangle* platforms, int arraySize) {
+void CalculateBoxPositions(Rectangle *platforms, int arraySize)
+{
     int totalWidth = arraySize * BOX_SIZE;
     int startX = (SCREEN_WIDTH - totalWidth) / 2;
-    
-    for (int i = 0; i < arraySize; i++) {
+
+    for (int i = 0; i < arraySize; i++)
+    {
         platforms[i] = (Rectangle){
-            startX + i * BOX_SIZE,  // Contiguous positioning (no gaps)
+            startX + i * BOX_SIZE, // Contiguous positioning (no gaps)
             ARRAY_Y_POSITION,
             BOX_SIZE,
-            BOX_SIZE
-        };
+            BOX_SIZE};
     }
 }
 
+// Function to calculate box positions with gaps for Quick Sort partitions
+void CalculateQuickSortBoxPositions(Rectangle *platforms, int arraySize, GameData *game)
+{
+    if (!game->algorithmData)
+    {
+        // Fallback to regular positioning if no algorithm data
+        CalculateBoxPositions(platforms, arraySize);
+        return;
+    }
 
-int GetPlayerPlatform(GameData* game) {
-    for (int i = 0; i < game->arraySize; i++) {
+    QuickSortData *data = (QuickSortData *)game->algorithmData;
+    const int GAP_SIZE = 40; // 40 pixels gap between partitions as specified in the doc
+
+    // Calculate total width including gaps
+    int totalBoxWidth = arraySize * BOX_SIZE;
+    int totalGaps = 0;
+
+    // Add gaps: one after left partition (i+1), one after pivot (keeping pivot with current subarray)
+    if (data->partitioning && data->i >= data->low)
+    {
+        totalGaps += GAP_SIZE; // Gap after left partition (≤ pivot)
+    }
+    if (data->partitioning && data->pivotIndex < data->high)
+    {
+        totalGaps += GAP_SIZE; // Gap after pivot (keeping pivot with current subarray)
+    }
+
+    int totalWidth = totalBoxWidth + totalGaps;
+    int startX = (SCREEN_WIDTH - totalWidth) / 2;
+    int currentX = startX;
+
+    for (int idx = 0; idx < arraySize; idx++)
+    {
+        // Add gap after left partition (elements ≤ pivot)
+        if (data->partitioning && idx == data->i + 1 && data->i >= data->low)
+        {
+            currentX += GAP_SIZE;
+        }
+
+        // Add gap after pivot element (keeping pivot with current subarray)
+        if (data->partitioning && idx == data->pivotIndex + 1 && data->pivotIndex < data->high)
+        {
+            currentX += GAP_SIZE;
+        }
+
+        platforms[idx] = (Rectangle){
+            currentX,
+            ARRAY_Y_POSITION,
+            BOX_SIZE,
+            BOX_SIZE};
+
+        currentX += BOX_SIZE;
+    }
+}
+
+int GetPlayerPlatform(GameData *game)
+{
+    for (int i = 0; i < game->arraySize; i++)
+    {
         Rectangle platform = game->platforms[i];
-        
+
+        // Adjust platform position based on Quick Sort state
+        if (game->selectedAlgorithm == ALGO_QUICK_SORT)
+        {
+            if (QuickSortIsCompletedPivot(game, i))
+            {
+                // Move collision detection down with completed pivots (1.5 rectangles lower)
+                platform.y += BOX_SIZE + (BOX_SIZE / 2);
+            }
+            else if (QuickSortIsSwappingElement(game, i))
+            {
+                // Move collision detection up with swapping elements (one rectangle higher)
+                platform.y -= BOX_SIZE;
+            }
+        }
+
         // Check if player is landing on top of platform (MATCH WORKING DEMO EXACTLY)
         if (game->player.y + game->player.height <= platform.y + GROUND_TOLERANCE &&
             game->player.y + game->player.height + game->velocity.y >= platform.y &&
-            game->player.x + game->player.width > platform.x + 8 && 
-            game->player.x < platform.x + platform.width - 8) {
-            
+            game->player.x + game->player.width > platform.x + 8 &&
+            game->player.x < platform.x + platform.width - 8)
+        {
+
             game->player.y = platform.y - game->player.height;
             game->velocity.y = 0;
             game->isOnGround = true;
@@ -96,16 +180,20 @@ int GetPlayerPlatform(GameData* game) {
     return -1;
 }
 
-void InitGame(void) {
+void InitGame(void)
+{
     // Initialize game state
     game.currentState = STATE_MAIN_MENU;
     game.previousState = STATE_MAIN_MENU;
-    
+
     // Load heart texture
-    if (FileExists("resources/heart.png")) {
+    if (FileExists("resources/heart.png"))
+    {
         heartTexture = LoadTexture("resources/heart.png");
         TraceLog(LOG_INFO, "Heart texture loaded successfully");
-    } else {
+    }
+    else
+    {
         TraceLog(LOG_WARNING, "heart.png not found, using fallback");
         // Create a simple red square as fallback
         Image heartImg = GenImageColor(32, 32, RED);
@@ -113,393 +201,472 @@ void InitGame(void) {
         UnloadImage(heartImg);
     }
 
-     // Initialize camera
-    game.camera = (Camera2D){ 0 };
-    game.camera.target = (Vector2){ game.player.x + game.player.width/2, 
-                                   game.player.y + game.player.height/2 };
-    game.camera.offset = (Vector2){ SCREEN_WIDTH/2.0f, SCREEN_HEIGHT/2.0f };
+    // Initialize camera
+    game.camera = (Camera2D){0};
+    game.camera.target = (Vector2){game.player.x + game.player.width / 2,
+                                   game.player.y + game.player.height / 2};
+    game.camera.offset = (Vector2){SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f};
     game.camera.rotation = 0.0f;
     game.camera.zoom = 1.0f;
     game.cameraMode = 0;
-    
+
     // Initialize game data
     game.selectedAlgorithm = ALGO_BUBBLE_SORT;
     game.selectedLevel = 0;
     game.hearts = MAX_HEARTS;
     game.score = 0;
     game.gameComplete = false;
-    
+
     // Initialize array
     game.arraySize = 5;
-    for (int i = 0; i < game.arraySize; i++) {
+    for (int i = 0; i < game.arraySize; i++)
+    {
         game.array[i] = i + 1;
     }
-    
+
     // Initialize player (same size as platforms)
     game.player = (Rectangle){100, 300, BOX_SIZE, BOX_SIZE};
     game.velocity = (Vector2){0, 0};
     game.isOnGround = false;
     game.playerNumber = 0;
     game.carrying = false;
-    
+
     // Initialize platforms (will be positioned by CalculateBoxPositions)
-    for (int i = 0; i < game.arraySize; i++) {
+    for (int i = 0; i < game.arraySize; i++)
+    {
         game.platforms[i] = (Rectangle){0, 0, 64, 64};
     }
     CalculateBoxPositions(game.platforms, game.arraySize);
-    
+
     game.selectedButton = 0;
     game.buttonPressed = false;
-    
+
     printf("Game initialized successfully\n");
 }
 
-void UpdateGame(void) {
+void UpdateGame(void)
+{
     // running all the time
-    switch (game.currentState) {
-        case STATE_MAIN_MENU:
-            // Handle main menu input
-            if (IsKeyPressed(KEY_DOWN)) {
-                game.selectedButton = (game.selectedButton + 1) % 2;
-            }
-            if (IsKeyPressed(KEY_UP)) {
-                game.selectedButton = (game.selectedButton - 1 + 2) % 2;
-            }
-            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
-                if (game.selectedButton == 0) {
-                    ChangeState(STATE_ALGORITHM_SELECT);
-                } else {
-                    // Quit game - will be handled by main loop
-                }
-            }
-            // No backspace navigation from main menu (it's the root)
-            break;
-            
-        case STATE_ALGORITHM_SELECT:
-            // Handle algorithm selection
-            if (IsKeyPressed(KEY_DOWN)) {
-                game.selectedButton = (game.selectedButton + 2) % MAX_ALGORITHMS;
-            }
-            if (IsKeyPressed(KEY_UP)) {
-                game.selectedButton = (game.selectedButton - 2 + MAX_ALGORITHMS) % MAX_ALGORITHMS;
-            }
-            if (IsKeyPressed(KEY_LEFT)) {
-                if (game.selectedButton % 2 == 1) game.selectedButton--;
-            }
-            if (IsKeyPressed(KEY_RIGHT)) {
-                if (game.selectedButton % 2 == 0 && game.selectedButton + 1 < MAX_ALGORITHMS) {
-                    game.selectedButton++;
-                }
-            }
-            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
-                game.selectedAlgorithm = (AlgorithmType)game.selectedButton;
-                ChangeState(STATE_LEVEL_SELECT);
-            }
-            if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE)) {
-                ChangeState(STATE_MAIN_MENU);
-            }
-            break;
-            
-        case STATE_LEVEL_SELECT:
-            // Handle level selection
-            if (IsKeyPressed(KEY_LEFT)) {
-                game.selectedButton = (game.selectedButton - 1 + (MAX_LEVELS + 1)) % (MAX_LEVELS + 1);
-            }
-            if (IsKeyPressed(KEY_RIGHT)) {
-                game.selectedButton = (game.selectedButton + 1) % (MAX_LEVELS + 1);
-            }
-            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
-                if (game.selectedButton < MAX_LEVELS) {
-                    game.selectedLevel = game.selectedButton;
-                    ResetLevel();
-                    ChangeState(STATE_GAMEPLAY);
-                } else {
-                    // Back button
-                    ChangeState(STATE_ALGORITHM_SELECT);
-                }
-            }
-            if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE)) {
+    switch (game.currentState)
+    {
+    case STATE_MAIN_MENU:
+        // Handle main menu input
+        if (IsKeyPressed(KEY_DOWN))
+        {
+            game.selectedButton = (game.selectedButton + 1) % 2;
+        }
+        if (IsKeyPressed(KEY_UP))
+        {
+            game.selectedButton = (game.selectedButton - 1 + 2) % 2;
+        }
+        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+        {
+            if (game.selectedButton == 0)
+            {
                 ChangeState(STATE_ALGORITHM_SELECT);
             }
-            break;
-            
-        case STATE_GAMEPLAY:
-            // Update player movement and physics
-            UpdatePlayerMovement(&game);
+            else
+            {
+                // Quit game - will be handled by main loop
+            }
+        }
+        // No backspace navigation from main menu (it's the root)
+        break;
 
-            // Add camera update
-            UpdateGameCamera(&game);
+    case STATE_ALGORITHM_SELECT:
+        // Handle algorithm selection
+        if (IsKeyPressed(KEY_DOWN))
+        {
+            game.selectedButton = (game.selectedButton + 2) % MAX_ALGORITHMS;
+        }
+        if (IsKeyPressed(KEY_UP))
+        {
+            game.selectedButton = (game.selectedButton - 2 + MAX_ALGORITHMS) % MAX_ALGORITHMS;
+        }
+        if (IsKeyPressed(KEY_LEFT))
+        {
+            if (game.selectedButton % 2 == 1)
+                game.selectedButton--;
+        }
+        if (IsKeyPressed(KEY_RIGHT))
+        {
+            if (game.selectedButton % 2 == 0 && game.selectedButton + 1 < MAX_ALGORITHMS)
+            {
+                game.selectedButton++;
+            }
+        }
+        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+        {
+            game.selectedAlgorithm = (AlgorithmType)game.selectedButton;
+            ChangeState(STATE_LEVEL_SELECT);
+        }
+        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE))
+        {
+            ChangeState(STATE_MAIN_MENU);
+        }
+        break;
 
-          
-            // Handle gameplay - delegate to algorithm
-            AlgorithmFunctions* algo = GetAlgorithm(game.selectedAlgorithm);
-            if (algo && algo->update) {
-                
-                algo->update(&game);
-            }
-            
-            if (IsKeyPressed(KEY_ESCAPE)) {
-                ChangeState(STATE_PAUSE);
-            }
-            if (IsKeyPressed(KEY_BACKSPACE)) {
-                ChangeState(STATE_LEVEL_SELECT);
-            }
-            if (IsKeyPressed(KEY_R)) {
-                ResetLevel();
-            }
-            break;
-            
-        case STATE_LEVEL_COMPLETE:
-            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
-                if (game.selectedLevel < MAX_LEVELS - 1) {
-                    game.selectedLevel++;
-                    ResetLevel();
-                    ChangeState(STATE_GAMEPLAY);
-                } else {
-                    ChangeState(STATE_ALGORITHM_SELECT);
-                }
-            }
-            if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE)) {
-                ChangeState(STATE_LEVEL_SELECT);
-            }
-            break;
-            
-        case STATE_GAME_OVER:
-            if (IsKeyPressed(KEY_R)) {
+    case STATE_LEVEL_SELECT:
+        // Handle level selection
+        if (IsKeyPressed(KEY_LEFT))
+        {
+            game.selectedButton = (game.selectedButton - 1 + (MAX_LEVELS + 1)) % (MAX_LEVELS + 1);
+        }
+        if (IsKeyPressed(KEY_RIGHT))
+        {
+            game.selectedButton = (game.selectedButton + 1) % (MAX_LEVELS + 1);
+        }
+        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+        {
+            if (game.selectedButton < MAX_LEVELS)
+            {
+                game.selectedLevel = game.selectedButton;
                 ResetLevel();
                 ChangeState(STATE_GAMEPLAY);
             }
-            if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE)) {
-                ChangeState(STATE_LEVEL_SELECT);
+            else
+            {
+                // Back button
+                ChangeState(STATE_ALGORITHM_SELECT);
             }
-            break;
-            
-        case STATE_PAUSE:
-            if (IsKeyPressed(KEY_ESCAPE)) {
+        }
+        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE))
+        {
+            ChangeState(STATE_ALGORITHM_SELECT);
+        }
+        break;
+
+    case STATE_GAMEPLAY:
+        // Update player movement and physics
+        UpdatePlayerMovement(&game);
+
+        // Add camera update
+        UpdateGameCamera(&game);
+
+        // Handle gameplay - delegate to algorithm
+        AlgorithmFunctions *algo = GetAlgorithm(game.selectedAlgorithm);
+        if (algo && algo->update)
+        {
+
+            algo->update(&game);
+        }
+
+        if (IsKeyPressed(KEY_ESCAPE))
+        {
+            ChangeState(STATE_PAUSE);
+        }
+        if (IsKeyPressed(KEY_BACKSPACE))
+        {
+            ChangeState(STATE_LEVEL_SELECT);
+        }
+        if (IsKeyPressed(KEY_R))
+        {
+            ResetLevel();
+        }
+        break;
+
+    case STATE_LEVEL_COMPLETE:
+        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE))
+        {
+            if (game.selectedLevel < MAX_LEVELS - 1)
+            {
+                game.selectedLevel++;
+                ResetLevel();
                 ChangeState(STATE_GAMEPLAY);
             }
-            break;
+            else
+            {
+                ChangeState(STATE_ALGORITHM_SELECT);
+            }
+        }
+        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE))
+        {
+            ChangeState(STATE_LEVEL_SELECT);
+        }
+        break;
+
+    case STATE_GAME_OVER:
+        if (IsKeyPressed(KEY_R))
+        {
+            ResetLevel();
+            ChangeState(STATE_GAMEPLAY);
+        }
+        if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_BACKSPACE))
+        {
+            ChangeState(STATE_LEVEL_SELECT);
+        }
+        break;
+
+    case STATE_PAUSE:
+        if (IsKeyPressed(KEY_ESCAPE))
+        {
+            ChangeState(STATE_GAMEPLAY);
+        }
+        break;
     }
 }
 
-void RenderGame(void) {
-    switch (game.currentState) {
-        case STATE_MAIN_MENU:
-            // Draw title with default font
-            DrawCenteredText("DISCRETIA", SCREEN_WIDTH/2, 150, FONT_SIZE_TITLE, UI_TEXT_PRIMARY);
-            DrawCenteredText("AN ALGO VISUALIZER PLATFORMER GAME", SCREEN_WIDTH/2, 200, FONT_SIZE_BODY, UI_TEXT_PRIMARY);
-            
-            // Draw buttons
-            Rectangle startBtn = {SCREEN_WIDTH/2 - BUTTON_WIDTH/2, 300, BUTTON_WIDTH, BUTTON_HEIGHT};
-            Rectangle quitBtn = {SCREEN_WIDTH/2 - BUTTON_WIDTH/2, 380, BUTTON_WIDTH, BUTTON_HEIGHT};
-            
-            Color startColor = (game.selectedButton == 0) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
-            Color quitColor = (game.selectedButton == 1) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
-            
-            DrawRectangleRec(startBtn, startColor);
-            DrawRectangleLinesEx(startBtn, 2, UI_BORDER);
-            DrawCenteredText("START GAME", startBtn.x + startBtn.width/2, startBtn.y + startBtn.height/2, FONT_SIZE_BUTTON, UI_TEXT_PRIMARY);
-            
-            DrawRectangleRec(quitBtn, quitColor);
-            DrawRectangleLinesEx(quitBtn, 2, UI_BORDER);
-            DrawCenteredText("QUIT", quitBtn.x + quitBtn.width/2, quitBtn.y + quitBtn.height/2, FONT_SIZE_BUTTON, UI_TEXT_PRIMARY);
-            break;
-            
-        case STATE_ALGORITHM_SELECT:
-            DrawCenteredText("SELECT ALGO", SCREEN_WIDTH/2, 100, FONT_SIZE_TITLE, UI_TEXT_PRIMARY);
-            
-            // Draw algorithm buttons in 2x3 grid
-            const char* algoNames[] = {"Bubble sort", "Selection sort", "Insertion sort", "Merge sort", "Quick sort"};
-            int startX = SCREEN_WIDTH/2 - BUTTON_WIDTH - 10;
-            int startY = 200;
-            
-            for (int i = 0; i < MAX_ALGORITHMS; i++) {
-                int col = i % 2;
-                int row = i / 2;
-                Rectangle btn = {
-                    startX + col * (BUTTON_WIDTH + 20),
-                    startY + row * (BUTTON_HEIGHT + 20),
-                    BUTTON_WIDTH,
-                    BUTTON_HEIGHT
-                };
-                
-                Color btnColor = (game.selectedButton == i) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
-                DrawRectangleRec(btn, btnColor);
-                DrawRectangleLinesEx(btn, 2, UI_BORDER);
-                // Convert to uppercase for better appearance with Mecha font
-                char algoNameUpper[32];
-                strncpy(algoNameUpper, algoNames[i], sizeof(algoNameUpper) - 1);
-                algoNameUpper[sizeof(algoNameUpper) - 1] = '\0';
-                for (size_t j = 0; j < strlen(algoNameUpper); j++) {
-                    algoNameUpper[j] = toupper(algoNameUpper[j]);
-                }
-                
+void RenderGame(void)
+{
+    switch (game.currentState)
+    {
+    case STATE_MAIN_MENU:
+        // Draw title with default font
+        DrawCenteredText("DISCRETIA", SCREEN_WIDTH / 2, 150, FONT_SIZE_TITLE, UI_TEXT_PRIMARY);
+        DrawCenteredText("AN ALGO VISUALIZER PLATFORMER GAME", SCREEN_WIDTH / 2, 200, FONT_SIZE_BODY, UI_TEXT_PRIMARY);
 
-                int fontSize = FONT_SIZE_BUTTON;
-                int textWidth = MeasureText(algoNameUpper, fontSize);
+        // Draw buttons
+        Rectangle startBtn = {SCREEN_WIDTH / 2 - BUTTON_WIDTH / 2, 300, BUTTON_WIDTH, BUTTON_HEIGHT};
+        Rectangle quitBtn = {SCREEN_WIDTH / 2 - BUTTON_WIDTH / 2, 380, BUTTON_WIDTH, BUTTON_HEIGHT};
 
-                while (textWidth > btn.width - 10 && fontSize > 10) {
-                    fontSize--;
-                    textWidth = MeasureText(algoNameUpper, fontSize);
-                }
+        Color startColor = (game.selectedButton == 0) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
+        Color quitColor = (game.selectedButton == 1) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
 
-                DrawCenteredText(algoNameUpper, btn.x + btn.width/2, btn.y + btn.height/2, fontSize, UI_TEXT_PRIMARY);
-                // DrawTextEx(gameFont, algoNameUpper, 
-                //           (Vector2){btn.x + (btn.width - MeasureTextEx(gameFont, algoNameUpper, FONT_SIZE_BUTTON, 1).x)/2, 
-                //                    btn.y + (btn.height - FONT_SIZE_BUTTON)/2}, 
-                //           FONT_SIZE_BUTTON, 1, UI_TEXT_PRIMARY);
-            }
-            break;
-            
-        case STATE_LEVEL_SELECT:
-            DrawCenteredText("SELECT LEVEL", SCREEN_WIDTH/2, 100, FONT_SIZE_TITLE, UI_TEXT_PRIMARY);
-            
-            // Draw level buttons horizontally
-            int levelStartX = SCREEN_WIDTH/2 - (MAX_LEVELS * 80 ) / 2;
-            int levelY = 250;
-            
-            for (int i = 0; i < MAX_LEVELS; i++) {
-                Rectangle btn = {levelStartX + i * 70, levelY, 70, 70};
-                Color btnColor = (game.selectedButton == i) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
-                
-                DrawRectangleRec(btn, btnColor);
-                DrawRectangleLinesEx(btn, 2, UI_BORDER);
-                
-                if (i == 0) {
-                    DrawCenteredText("?", btn.x + btn.width/2, btn.y + btn.height/2, FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
-                } else if (i <= MAX_LEVELS) {
-                    char levelText[8];
-                    sprintf(levelText, "%d", i);
-                    DrawCenteredText(levelText, btn.x + btn.width/2, btn.y + btn.height/2, FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
-                }
-            }
-            break;
-            
-        case STATE_GAMEPLAY:
-            // Draw level info
-            char levelText[32];
-            sprintf(levelText, "LEVEL %d", game.selectedLevel + 1);
-            DrawText(levelText, 20, 20, FONT_SIZE_BODY * 2, UI_TEXT_PRIMARY);
-            
-            // Draw hearts
-            const int heartSize = 30;
-            const int heartSpacing = 40;
-            for (int i = 0; i < game.hearts; i++) {
-                if (heartTexture.id > 0) {
-                    DrawTexture(heartTexture, SCREEN_WIDTH - 130 + i * heartSpacing, 20, WHITE);
-                } else {
-                    // Fallback: draw red square if texture failed to load
-                    DrawRectangle(SCREEN_WIDTH - 100 + i * heartSpacing, 20, heartSize, heartSize, RED);
-                }
+        DrawRectangleRec(startBtn, startColor);
+        DrawRectangleLinesEx(startBtn, 2, UI_BORDER);
+        DrawCenteredText("START GAME", startBtn.x + startBtn.width / 2, startBtn.y + startBtn.height / 2, FONT_SIZE_BUTTON, UI_TEXT_PRIMARY);
+
+        DrawRectangleRec(quitBtn, quitColor);
+        DrawRectangleLinesEx(quitBtn, 2, UI_BORDER);
+        DrawCenteredText("QUIT", quitBtn.x + quitBtn.width / 2, quitBtn.y + quitBtn.height / 2, FONT_SIZE_BUTTON, UI_TEXT_PRIMARY);
+        break;
+
+    case STATE_ALGORITHM_SELECT:
+        DrawCenteredText("SELECT ALGO", SCREEN_WIDTH / 2, 100, FONT_SIZE_TITLE, UI_TEXT_PRIMARY);
+
+        // Draw algorithm buttons in 2x3 grid
+        const char *algoNames[] = {"Bubble sort", "Selection sort", "Insertion sort", "Merge sort", "Quick sort"};
+        int startX = SCREEN_WIDTH / 2 - BUTTON_WIDTH - 10;
+        int startY = 200;
+
+        for (int i = 0; i < MAX_ALGORITHMS; i++)
+        {
+            int col = i % 2;
+            int row = i / 2;
+            Rectangle btn = {
+                startX + col * (BUTTON_WIDTH + 20),
+                startY + row * (BUTTON_HEIGHT + 20),
+                BUTTON_WIDTH,
+                BUTTON_HEIGHT};
+
+            Color btnColor = (game.selectedButton == i) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
+            DrawRectangleRec(btn, btnColor);
+            DrawRectangleLinesEx(btn, 2, UI_BORDER);
+            // Convert to uppercase for better appearance with Mecha font
+            char algoNameUpper[32];
+            strncpy(algoNameUpper, algoNames[i], sizeof(algoNameUpper) - 1);
+            algoNameUpper[sizeof(algoNameUpper) - 1] = '\0';
+            for (size_t j = 0; j < strlen(algoNameUpper); j++)
+            {
+                algoNameUpper[j] = toupper(algoNameUpper[j]);
             }
 
-            
-            // Start camera mode for world objects
-            BeginMode2D(game.camera);
-           
+            int fontSize = FONT_SIZE_BUTTON;
+            int textWidth = MeasureText(algoNameUpper, fontSize);
+
+            while (textWidth > btn.width - 10 && fontSize > 10)
+            {
+                fontSize--;
+                textWidth = MeasureText(algoNameUpper, fontSize);
+            }
+
+            DrawCenteredText(algoNameUpper, btn.x + btn.width / 2, btn.y + btn.height / 2, fontSize, UI_TEXT_PRIMARY);
+            // DrawTextEx(gameFont, algoNameUpper,
+            //           (Vector2){btn.x + (btn.width - MeasureTextEx(gameFont, algoNameUpper, FONT_SIZE_BUTTON, 1).x)/2,
+            //                    btn.y + (btn.height - FONT_SIZE_BUTTON)/2},
+            //           FONT_SIZE_BUTTON, 1, UI_TEXT_PRIMARY);
+        }
+        break;
+
+    case STATE_LEVEL_SELECT:
+        DrawCenteredText("SELECT LEVEL", SCREEN_WIDTH / 2, 100, FONT_SIZE_TITLE, UI_TEXT_PRIMARY);
+
+        // Draw level buttons horizontally
+        int levelStartX = SCREEN_WIDTH / 2 - (MAX_LEVELS * 80) / 2;
+        int levelY = 250;
+
+        for (int i = 0; i < MAX_LEVELS; i++)
+        {
+            Rectangle btn = {levelStartX + i * 70, levelY, 70, 70};
+            Color btnColor = (game.selectedButton == i) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
+
+            DrawRectangleRec(btn, btnColor);
+            DrawRectangleLinesEx(btn, 2, UI_BORDER);
+
+            if (i == 0)
+            {
+                DrawCenteredText("?", btn.x + btn.width / 2, btn.y + btn.height / 2, FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
+            }
+            else if (i <= MAX_LEVELS)
+            {
+                char levelText[8];
+                sprintf(levelText, "%d", i);
+                DrawCenteredText(levelText, btn.x + btn.width / 2, btn.y + btn.height / 2, FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
+            }
+        }
+        break;
+
+    case STATE_GAMEPLAY:
+        // Draw level info
+        char levelText[32];
+        sprintf(levelText, "LEVEL %d", game.selectedLevel + 1);
+        DrawText(levelText, 20, 20, FONT_SIZE_BODY * 2, UI_TEXT_PRIMARY);
+
+        // Draw hearts
+        const int heartSize = 30;
+        const int heartSpacing = 40;
+        for (int i = 0; i < game.hearts; i++)
+        {
+            if (heartTexture.id > 0)
+            {
+                DrawTexture(heartTexture, SCREEN_WIDTH - 130 + i * heartSpacing, 20, WHITE);
+            }
+            else
+            {
+                // Fallback: draw red square if texture failed to load
+                DrawRectangle(SCREEN_WIDTH - 100 + i * heartSpacing, 20, heartSize, heartSize, RED);
+            }
+        }
+
+        // Start camera mode for world objects
+        BeginMode2D(game.camera);
+
+        // Draw platforms
+        for (int i = 0; i < game.arraySize; i++)
+        {
+            // Choose color and position based on Quick Sort state
+            Color platformColor = UI_BUTTON_NORMAL;
+            Rectangle platformRect = game.platforms[i];
+
+            if (game.selectedAlgorithm == ALGO_QUICK_SORT)
+            {
+                if (QuickSortIsCompletedPivot(&game, i))
+                {
+                    platformColor = QUICK_COMPLETED; // Light green for completed pivots
+                    // Move completed pivots 1.5 rectangles lower
+                    platformRect.y += BOX_SIZE + (BOX_SIZE / 2);
+                }
+                else if (QuickSortIsSwappingElement(&game, i))
+                {
+                    // Elements involved in pivot swapping go one rectangle higher
+                    platformRect.y -= BOX_SIZE;
+                }
+            }
+
+            DrawRectangleRec(platformRect, platformColor);
+            DrawRectangleLinesEx(platformRect, 2, LIGHTGRAY); // border
 
             // Draw platforms
             int playerPlatformIndex = GetPlayerPlatform(&game); // Get the single platform player is on
-            
-            for (int i = 0; i < game.arraySize; i++) {
+
+            for (int i = 0; i < game.arraySize; i++)
+            {
                 Rectangle platform = game.platforms[i];
-                
+
                 DrawRectangleRec(platform, UI_BUTTON_NORMAL);
-                
+
                 // Highlight only the single platform the player is actually on
                 Color borderColor = (playerPlatformIndex == i) ? BLACK : LIGHTGRAY;
                 DrawRectangleLinesEx(platform, 2, borderColor);
-                
-                if (game.array[i] != 0) {
+
+                if (game.array[i] != 0)
+                {
                     char numText[8];
                     sprintf(numText, "%d", game.array[i]);
-    
-                    DrawCenteredText(numText, 
-                                   platform.x + platform.width/2, 
-                                   platform.y + platform.height/2 , 
-                                   FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
+
+                    DrawCenteredText(numText,
+                                     platform.x + platform.width / 2,
+                                     platform.y + platform.height / 2,
+                                     FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
                 }
-            }     
-            
-            // Draw player
-            RenderPlayer(&game);
-            
-            // Delegate additional rendering to algorithm
-            AlgorithmFunctions* algo = GetAlgorithm(game.selectedAlgorithm);
-            if (algo && algo->render) {
-                algo->render(&game);
             }
+        }
 
-           // End camera mode
-            EndMode2D();
+        // Draw player
+        RenderPlayer(&game);
 
-            
-            break;
-            
-        case STATE_LEVEL_COMPLETE:
-            DrawCenteredText("Level Complete!", SCREEN_WIDTH/2, 200, FONT_SIZE_TITLE, GAME_SORTED);
-            DrawCenteredText("Press ENTER to continue", SCREEN_WIDTH/2, 300, FONT_SIZE_BODY, UI_TEXT_PRIMARY);
-            break;
-            
-        case STATE_GAME_OVER:
-            DrawCenteredText("Game Over", SCREEN_WIDTH/2, 200, FONT_SIZE_TITLE, GAME_HEART);
-            DrawCenteredText("Press R to retry or ESC for menu", SCREEN_WIDTH/2, 300, FONT_SIZE_BODY, UI_TEXT_PRIMARY);
-            break;
-            
-        case STATE_PAUSE:
-            DrawCenteredText("Paused", SCREEN_WIDTH/2, 200, FONT_SIZE_TITLE, UI_TEXT_PRIMARY);
-            DrawCenteredText("Press ESC to resume", SCREEN_WIDTH/2, 300, FONT_SIZE_BODY, UI_TEXT_PRIMARY);
-            break;
+        // Delegate additional rendering to algorithm
+        AlgorithmFunctions *algo = GetAlgorithm(game.selectedAlgorithm);
+        if (algo && algo->render)
+        {
+            algo->render(&game);
+        }
+
+        // End camera mode
+        EndMode2D();
+
+        break;
+
+    case STATE_LEVEL_COMPLETE:
+        DrawCenteredText("Level Complete!", SCREEN_WIDTH / 2, 200, FONT_SIZE_TITLE, GAME_SORTED);
+        DrawCenteredText("Press ENTER to continue", SCREEN_WIDTH / 2, 300, FONT_SIZE_BODY, UI_TEXT_PRIMARY);
+        break;
+
+    case STATE_GAME_OVER:
+        DrawCenteredText("Game Over", SCREEN_WIDTH / 2, 200, FONT_SIZE_TITLE, GAME_HEART);
+        DrawCenteredText("Press R to retry or ESC for menu", SCREEN_WIDTH / 2, 300, FONT_SIZE_BODY, UI_TEXT_PRIMARY);
+        break;
+
+    case STATE_PAUSE:
+        DrawCenteredText("Paused", SCREEN_WIDTH / 2, 200, FONT_SIZE_TITLE, UI_TEXT_PRIMARY);
+        DrawCenteredText("Press ESC to resume", SCREEN_WIDTH / 2, 300, FONT_SIZE_BODY, UI_TEXT_PRIMARY);
+        break;
     }
 }
 
-void CleanupGame(void) {
+void CleanupGame(void)
+{
     // Cleanup algorithm-specific data
-    AlgorithmFunctions* algo = GetAlgorithm(game.selectedAlgorithm);
-    if (algo && algo->cleanup) algo->cleanup(&game);
+    AlgorithmFunctions *algo = GetAlgorithm(game.selectedAlgorithm);
+    if (algo && algo->cleanup)
+        algo->cleanup(&game);
 
     // Clean up heart texture if it was loaded
-    if (heartTexture.id > 0) {
+    if (heartTexture.id > 0)
+    {
         UnloadTexture(heartTexture);
         heartTexture = (Texture2D){0};
     }
-    
- 
-    
+
     printf("Game cleaned up successfully\n");
 }
 
-void ChangeState(GameState newState) {
+void ChangeState(GameState newState)
+{
     game.previousState = game.currentState;
     game.currentState = newState;
     game.selectedButton = 0; // Reset button selection
-    
+
     printf("State changed from %d to %d\n", game.previousState, game.currentState);
 }
 
-void ResetLevel(void) {
+void ResetLevel(void)
+{
     // Reset game state for current level
     game.hearts = MAX_HEARTS;
     game.score = 0;
     game.gameComplete = false;
-    
+
     /* 1.  free previous algorithm memory (if any) ---------------------- */
     AlgorithmFunctions *algo = GetAlgorithm(game.selectedAlgorithm);
-    if (algo && algo->cleanup) algo->cleanup(&game);
+    if (algo && algo->cleanup)
+        algo->cleanup(&game);
 
     /* 2.  allocate / initialise new algorithm data --------------------- */
-    if (algo && algo->init) algo->init(&game);
+    if (algo && algo->init)
+        algo->init(&game);
 
     /* 3.  let the algorithm set up the level array --------------------- */
-    if (algo && algo->resetLevel) algo->resetLevel(&game, game.selectedLevel);
+    if (algo && algo->resetLevel)
+        algo->resetLevel(&game, game.selectedLevel);
     // Recalculate box positions after array size might have changed
     CalculateBoxPositions(game.platforms, game.arraySize);
-    
+
     // Reset player position to first platform
     game.player.x = game.platforms[0].x + (game.platforms[0].width - game.player.width) / 2;
     game.player.y = game.platforms[0].y - game.player.height;
     game.velocity = (Vector2){0, 0};
     game.isOnGround = true;
-    
+
     printf("Level %d reset\n", game.selectedLevel);
 }
