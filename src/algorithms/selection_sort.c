@@ -176,26 +176,9 @@ void SelectionSortRender(GameData* game) {
         }
     }
     
-    // Highlight unsorted section being searched
-    if (data->findingMinimum) {
-        for (int i = data->sortedBoundary; i < game->arraySize; i++) {
-            if (game->array[i] != 0) {
-                DrawRectangleLinesEx(game->platforms[i], 2, (Color){255, 255, 0, 255}); // Yellow for unsorted
-            }
-        }
-    }
+   
     
-    // Highlight current player platform
-    int playerPlatform = GetPlayerPlatform(game);
-    if (playerPlatform >= 0) {
-        Color highlightColor = GAME_HIGHLIGHT;
-        if (data->swapping && playerPlatform == data->sortedBoundary) {
-            highlightColor = GAME_SELECTED; // Special color for swap target
-        } else if (data->findingMinimum && playerPlatform >= data->sortedBoundary) {
-            highlightColor = (Color){0, 255, 255, 255}; // Cyan for searchable area
-        }
-        DrawRectangleLinesEx(game->platforms[playerPlatform], 2, highlightColor);
-    }
+   
     
     // Show correct positions when H key is held
     if (IsKeyDown(KEY_H)) {
