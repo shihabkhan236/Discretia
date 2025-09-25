@@ -552,13 +552,17 @@ void RenderGame(void)
         {
             // Choose color and position based on Quick Sort state
             Color platformColor = UI_BUTTON_NORMAL;
+            Color borderColor = LIGHTGRAY;
             Rectangle platformRect = game.platforms[i];
+            bool isCompletedPivot = false;
 
             if (game.selectedAlgorithm == ALGO_QUICK_SORT)
             {
                 if (QuickSortIsCompletedPivot(&game, i))
                 {
-                    platformColor = QUICK_COMPLETED; // Light green for completed pivots
+                    isCompletedPivot = true;
+                    // Keep normal background color for completed pivots
+                    platformColor = UI_BUTTON_NORMAL;
                     // Move completed pivots 1.5 rectangles lower
                     platformRect.y += BOX_SIZE + (BOX_SIZE / 2);
                 }
@@ -575,8 +579,15 @@ void RenderGame(void)
             // Draw the platform rectangle
             DrawRectangleRec(platformRect, platformColor);
 
-            // Choose border color
-            Color borderColor = (playerPlatformIndex == i) ? BLACK : LIGHTGRAY;
+            // Choose border color - green for completed pivots, otherwise normal logic
+            if (isCompletedPivot)
+            {
+                borderColor = QUICK_COMPLETED; // Green border for completed pivots
+            }
+            else
+            {
+                borderColor = (playerPlatformIndex == i) ? BLACK : LIGHTGRAY;
+            }
             DrawRectangleLinesEx(platformRect, 2, borderColor);
 
             // Draw the number on the platform (at the adjusted position)

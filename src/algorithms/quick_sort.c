@@ -31,7 +31,6 @@ static void PushStack(QuickSortData *data, int low, int high);
 static bool PopStack(QuickSortData *data, int *low, int *high);
 static void StartNewPartition(QuickSortData *data, GameData *game);
 static void StartComparison(QuickSortData *data, GameData *game);
-static void PerformSwap(QuickSortData *data, GameData *game, int pos1, int pos2);
 static void CompleteComparison(QuickSortData *data, GameData *game);
 
 void QuickSortInit(GameData *game)
@@ -314,18 +313,20 @@ void QuickSortUpdate(GameData *game)
     }
 }
 
-void QuickSortGetStats(GameData* game, AlgorithmStats* stats) {
-    QuickSortData* data = (QuickSortData*)game->algorithmData;
-    if (!data) return;
-    
+void QuickSortGetStats(GameData *game, AlgorithmStats *stats)
+{
+    QuickSortData *data = (QuickSortData *)game->algorithmData;
+    if (!data)
+        return;
+
     // Primary stat: Partitions, comparisons, swaps
     sprintf(stats->primaryStat, "Partitions: %d | Comparisons: %d | Swaps: %d",
             data->partitionsCompleted, data->comparisons, data->swaps);
-    
+
     // Secondary stat: Current partition info
     sprintf(stats->secondaryStat, "Partition [%d...%d] | i=%d, j=%d | Pivot=%d (value=%d)",
             data->low, data->high, data->i, data->j, data->pivotIndex, game->array[data->pivotIndex]);
-    
+
     // Instructions based on current state
     stats->hasInstruction = true;
     if (data->comparing)
@@ -360,7 +361,7 @@ void QuickSortGetStats(GameData* game, AlgorithmStats* stats) {
         strcpy(stats->instructionText, "Processing next comparison...");
         stats->instructionColor = UI_TEXT_PRIMARY;
     }
-    
+
     strcpy(stats->goalText, "Goal: Partition using Lomuto algorithm (i,j pointers)");
 }
 
@@ -371,7 +372,7 @@ void QuickSortRender(GameData *game)
         return;
 
     // Only render visual highlights and game objects, no text UI
-    
+
     if (data->comparing)
     {
         // Highlight positions in traditional Lomuto algorithm
@@ -609,15 +610,6 @@ static void StartComparison(QuickSortData *data, GameData *game)
     }
 }
 
-static void PerformSwap(QuickSortData *data, GameData *game, int pos1, int pos2)
-{
-    int temp = game->array[pos1];
-    game->array[pos1] = game->array[pos2];
-    game->array[pos2] = temp;
-    data->swaps++;
-    printf("Swapped arr[%d]=%d with arr[%d]=%d\n", pos1, game->array[pos1], pos2, game->array[pos2]);
-}
-
 static void CompleteComparison(QuickSortData *data, GameData *game)
 {
     data->comparisons++;
@@ -671,6 +663,10 @@ static void CompleteComparison(QuickSortData *data, GameData *game)
 // Utility function for UI rendering - returns true if value at position should be hidden
 bool QuickSortShouldHideValue(GameData *game, int position)
 {
+    // Suppress unused parameter warnings
+    (void)game;
+    (void)position;
+
     // Values are no longer hidden during pivot swapping for better user experience
     return false;
 }
