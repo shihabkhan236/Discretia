@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 
 // Helper functions
 static void PushStack(QuickSortData *data, int low, int high);
@@ -408,6 +409,127 @@ void QuickSortRender(GameData *game)
     for (int idx = data->low; idx <= data->i && idx < game->arraySize; idx++)
     {
         DrawRectangleLinesEx(game->platforms[idx], 2, DARKGREEN);
+    }
+
+    // Draw partition separators and labels - REMOVED FOR CLEANER UI
+    // Separator lines and indicators removed to improve visual clarity
+
+    // Draw i and j indicators below the boxes for better understanding - ALWAYS VISIBLE
+    // Handle overlapping by placing labels side by side within rectangle width
+
+    // Collect all labels that need to be drawn at each position
+    for (int pos = 0; pos < game->arraySize; pos++)
+    {
+        Rectangle platform = game->platforms[pos];
+
+        // Adjust platform position based on state
+        if (QuickSortIsSwappingElement(game, pos))
+        {
+            platform.y -= BOX_SIZE + (BOX_SIZE / 2);
+        }
+        else if (QuickSortIsCompletedPivot(game, pos))
+        {
+            platform.y += BOX_SIZE + (BOX_SIZE / 2);
+        }
+
+        float baseY = platform.y + platform.height + 10;
+
+        // Collect labels for this position
+        char labels[4][10] = {"", "", "", ""}; // Max 4 labels: i, j, i+1, pivot
+        Color colors[4] = {{0}, {0}, {0}, {0}};
+        int labelCount = 0;
+
+        // Check for "j"
+        if (data->j == pos)
+        {
+            strcpy(labels[labelCount], "j");
+            colors[labelCount] = (Color){200, 100, 0, 255}; // Dark orange
+            labelCount++;
+        }
+
+        // Check for "i"
+        if (data->i == pos && data->i >= 0)
+        {
+            strcpy(labels[labelCount], "i");
+            colors[labelCount] = (Color){0, 100, 0, 255}; // Dark green
+            labelCount++;
+        }
+
+        // Check for "i+1"
+        if (data->i + 1 == pos && data->i + 1 >= 0)
+        {
+            strcpy(labels[labelCount], "i+1");
+            colors[labelCount] = (data->comparing && data->needsSwap) ? (Color){0, 150, 200, 255} : // Darker cyan when swap needed
+                                     (Color){0, 100, 180, 255};                                     // Darker blue otherwise
+            labelCount++;
+        }
+
+        // Check for "pivot"
+        if (data->pivotIndex == pos)
+        {
+            strcpy(labels[labelCount], "pivot");
+            colors[labelCount] = (Color){180, 50, 50, 255}; // Dark red
+            labelCount++;
+        }
+
+        // Check for additional "i+1" during pivot swapping
+        if (data->pivotSwapping && data->i + 1 == pos && data->i + 1 != data->pivotIndex)
+        {
+            strcpy(labels[labelCount], "i+1");
+            colors[labelCount] = (Color){0, 150, 200, 255}; // Dark cyan
+            labelCount++;
+        }
+
+        // Draw labels side by side if multiple labels at same position
+        if (labelCount > 0)
+        {
+            float totalWidth = 0;
+            int fontSize = FONT_SIZE_SMALL; // Smaller font size
+
+            // Calculate total width of all labels with spaces
+            for (int i = 0; i < labelCount; i++)
+            {
+                totalWidth += MeasureText(labels[i], fontSize);
+                if (i < labelCount - 1)
+                    totalWidth += 8; // Space between labels
+            }
+
+            // Ensure labels fit within rectangle width
+            if (totalWidth > platform.width)
+            {
+                fontSize = 16; // Even smaller if needed
+                totalWidth = 0;
+                for (int i = 0; i < labelCount; i++)
+                {
+                    totalWidth += MeasureText(labels[i], fontSize);
+                    if (i < labelCount - 1)
+                        totalWidth += 6; // Smaller space
+                }
+            }
+
+            // Start position for labels (centered under the rectangle)
+            float startX = platform.x + (platform.width - totalWidth) / 2;
+            float currentX = startX;
+
+            // Draw each label
+            for (int i = 0; i < labelCount; i++)
+            {
+                int textWidth = MeasureText(labels[i], fontSize);
+                DrawText(labels[i], currentX, baseY + 15, fontSize, colors[i]);
+                currentX += textWidth + (fontSize == FONT_SIZE_SMALL ? 8 : 6);
+            }
+        }
+    }
+
+    // Handle special case: "i" at position -1
+    if (data->i == -1)
+    {
+        Rectangle firstPlatform = game->platforms[0];
+        float iLabelX = firstPlatform.x - 40; // 40 pixels to the left
+        float iLabelY = firstPlatform.y + firstPlatform.height + 10;
+
+        Color darkGreen = {0, 100, 0, 255};
+        DrawText("i", iLabelX, iLabelY + 15, FONT_SIZE_SMALL, darkGreen);
     }
 
     // Highlight current player platform if they can interact

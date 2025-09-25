@@ -617,21 +617,26 @@ void RenderGame(void)
         EndMode2D();
 
         // Render algorithm stats outside camera view (fixed screen position)
-        if (algo && algo->getStats) {
+        if (algo && algo->getStats)
+        {
             AlgorithmStats stats = {0};
             algo->getStats(&game, &stats);
-            
+
             // Render stats in fixed screen coordinates
-            if (strlen(stats.primaryStat) > 0) {
+            if (strlen(stats.primaryStat) > 0)
+            {
                 DrawText(stats.primaryStat, 20, 120, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
             }
-            if (strlen(stats.secondaryStat) > 0) {
+            if (strlen(stats.secondaryStat) > 0)
+            {
                 DrawText(stats.secondaryStat, 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
             }
-            if (stats.hasInstruction && strlen(stats.instructionText) > 0) {
+            if (stats.hasInstruction && strlen(stats.instructionText) > 0)
+            {
                 DrawText(stats.instructionText, 20, 160, FONT_SIZE_SMALL, stats.instructionColor);
             }
-            if (strlen(stats.goalText) > 0) {
+            if (strlen(stats.goalText) > 0)
+            {
                 DrawText(stats.goalText, 20, 200, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
             }
         }
