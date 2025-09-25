@@ -399,17 +399,24 @@ void RenderGame(void) {
            
 
             // Draw platforms
+            int playerPlatformIndex = GetPlayerPlatform(&game); // Get the single platform player is on
+            
             for (int i = 0; i < game.arraySize; i++) {
-                DrawRectangleRec(game.platforms[i], UI_BUTTON_NORMAL);
-                DrawRectangleLinesEx(game.platforms[i], 2, LIGHTGRAY); // border
+                Rectangle platform = game.platforms[i];
+                
+                DrawRectangleRec(platform, UI_BUTTON_NORMAL);
+                
+                // Highlight only the single platform the player is actually on
+                Color borderColor = (playerPlatformIndex == i) ? BLACK : LIGHTGRAY;
+                DrawRectangleLinesEx(platform, 2, borderColor);
                 
                 if (game.array[i] != 0) {
                     char numText[8];
                     sprintf(numText, "%d", game.array[i]);
     
                     DrawCenteredText(numText, 
-                                   game.platforms[i].x + game.platforms[i].width/2, 
-                                   game.platforms[i].y + game.platforms[i].height/2 , 
+                                   platform.x + platform.width/2, 
+                                   platform.y + platform.height/2 , 
                                    FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
                 }
             }     
