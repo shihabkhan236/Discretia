@@ -279,18 +279,53 @@ void InsertionSortUpdate(GameData *game)
                 if (emptyIndex > onSquare)
                 {
                     // Moving empty space right (element moves left)
-                    if (game->playerNumber <= game->array[onSquare])
+                    // In insertion sort, we can ONLY move left into the sorted portion
+                    // Check if we're moving into the sorted portion AND maintaining order
+                    if (onSquare < data->currentIndex && game->playerNumber <= game->array[onSquare])
                     {
                         validMove = true;
+                    }
+                    else if (onSquare >= data->currentIndex)
+                    {
+                        // Invalid: trying to move into unsorted portion
+                        printf("✗ Invalid! In insertion sort, you can only move LEFT into the sorted portion\n");
+                        game->hearts--;
+                        data->mistakes++;
+                        printf("Hearts remaining: %d\n", game->hearts);
+                        if (game->hearts <= 0)
+                        {
+                            ChangeState(STATE_GAME_OVER);
+                        }
+                        return;
+                    }
+                    else
+                    {
+                        // Invalid: wrong order within sorted portion
+                        printf("✗ Wrong order! Element %d cannot be placed before %d\n", game->playerNumber, game->array[onSquare]);
+                        game->hearts--;
+                        data->mistakes++;
+                        printf("Hearts remaining: %d\n", game->hearts);
+                        if (game->hearts <= 0)
+                        {
+                            ChangeState(STATE_GAME_OVER);
+                        }
+                        return;
                     }
                 }
                 else
                 {
                     // Moving empty space left (element moves right)
-                    if (game->playerNumber >= game->array[onSquare])
+                    // In insertion sort, this is NEVER allowed! Elements should only move left!
+                    printf("✗ Invalid! In insertion sort, elements can ONLY move LEFT to find their insertion point\n");
+                    printf("✗ You cannot move element %d to the right (toward unsorted portion)\n", game->playerNumber);
+                    game->hearts--;
+                    data->mistakes++;
+                    printf("Hearts remaining: %d\n", game->hearts);
+                    if (game->hearts <= 0)
                     {
-                        validMove = true;
+                        ChangeState(STATE_GAME_OVER);
                     }
+                    return; // Block this move completely
                 }
 
                 if (validMove)
@@ -301,18 +336,7 @@ void InsertionSortUpdate(GameData *game)
                     game->playerNumber = temp;
                     data->shifts++;
                     data->comparisons++;
-                    printf("✓ Swapped elements (empty space moved)\n");
-                }
-                else
-                {
-                    // Wrong move - penalty
-                    game->hearts--;
-                    data->mistakes++;
-                    printf("✗ Wrong swap direction! Hearts remaining: %d\n", game->hearts);
-                    if (game->hearts <= 0)
-                    {
-                        ChangeState(STATE_GAME_OVER);
-                    }
+                    printf("✓ Swapped elements - moved %d left in sorted portion\n", game->array[onSquare]);
                 }
             }
             else
@@ -414,29 +438,11 @@ void InsertionSortRender(GameData *game)
     int playerPlatform = GetPlayerPlatform(game);
     if (playerPlatform >= 0)
     {
-        Color highlightColor = GAME_HIGHLIGHT;
         if (data->pickingElement && playerPlatform == data->currentIndex)
         {
-            highlightColor = GAME_SELECTED; // Special color for element to pick
-        }
-        else if (data->comparing && game->carrying)
-        {
-            // Find empty box
-            int emptyIndex = -1;
-            for (int i = 0; i < game->arraySize; i++)
-            {
-                if (game->array[i] == 0)
-                {
-                    emptyIndex = i;
-                    break;
-                }
-            }
-            if (playerPlatform == emptyIndex || abs(playerPlatform - emptyIndex) == 1)
-            {
-                highlightColor = (Color){0, 255, 255, 255}; // Cyan for valid insertion moves
-            }
-        }
-        DrawRectangleLinesEx(game->platforms[playerPlatform], 2, highlightColor);
+            
+            DrawRectangleLinesEx(game->platforms[playerPlatform], 2, GAME_SELECTED);
+        } 
     }
 
     // Show correct positions when H key is held
@@ -451,7 +457,7 @@ void InsertionSortRender(GameData *game)
         {
             if (game->array[i] != 0 && game->array[i] == target[i])
             {
-                DrawRectangleLinesEx(game->platforms[i], 3, GAME_SORTED);
+                DrawRectangleLinesEx(game->platforms[i], 2, GAME_SORTED);
             }
         }
     }
