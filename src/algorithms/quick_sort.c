@@ -57,6 +57,9 @@ void QuickSortInit(GameData *game)
     data->waitingForSwap = false;
     data->pivotSwapping = false;
     data->hideOtherValues = false;
+    data->manualElevation = false;
+    data->pivotInSortedRegion = false;
+    data->needsIncrementI = false;
 
     data->comparisons = 0;
     data->swaps = 0;
@@ -77,8 +80,8 @@ void QuickSortInit(GameData *game)
 
     game->algorithmData = data;
 
-    // Update platform positions for Quick Sort with gaps
-    CalculateQuickSortBoxPositions(game->platforms, game->arraySize, game);
+    // Update platform positions for Quick Sort
+    CalculateBoxPositions(game->platforms, game->arraySize);
 
     // Start first comparison if array has more than one element
     if (game->arraySize > 1)
@@ -96,19 +99,66 @@ void QuickSortUpdate(GameData *game)
     if (!data)
         return;
 
-    // Check if sorting is complete
-    if (IsReadyForCompletion(game))
+    // Check if sorting is complete using proper QuickSort completion logic
+    if (QuickSortIsComplete(game))
     {
         StartCompletionAnimation();
         return;
     }
 
+    // Handle T key for manual elevation during pivot swapping
+    if (IsKeyPressed(KEY_T))
+    {
+        if (data->needsIncrementI)
+        {
+            printf("First press F to increment i (move partition boundary), then T to elevate.\n");
+        }
+        else if (data->pivotSwapping && !data->manualElevation)
+        {
+            data->manualElevation = true;
+            printf("✓ Rectangles elevated! Now you can swap the pivot.\n");
+        }
+        else if (data->pivotSwapping && data->manualElevation)
+        {
+            printf("Rectangles are already elevated.\n");
+        }
+        else
+        {
+            printf("T key only works during pivot swapping phase.\n");
+        }
+    }
+
     // Handle F key for swapping when needed
     if (IsKeyPressed(KEY_F))
     {
-        if (!data->comparing && !data->pivotSwapping)
+        printf("DEBUG: F key pressed - comparing=%s, pivotSwapping=%s, pivotInSortedRegion=%s, needsIncrementI=%s\n",
+               data->comparing ? "true" : "false",
+               data->pivotSwapping ? "true" : "false",
+               data->pivotInSortedRegion ? "true" : "false",
+               data->needsIncrementI ? "true" : "false");
+
+        // Handle incrementing i before pivot swapping (Lomuto algorithm step)
+        if (data->needsIncrementI)
         {
-            printf("Wait for the next comparison phase\n");
+            // Increment i to create final pivot position
+            data->i++;
+            data->needsIncrementI = false;
+
+            int finalPivotPos = data->i;
+            printf("✓ i incremented to %d! This becomes the final pivot position.\n", finalPivotPos);
+
+            // Now enter pivot swapping mode - user must press T to elevate before swapping
+            data->pivotSwapping = true;
+            data->manualElevation = false; // User must press T to elevate
+            printf("🎯 NOW PRESS T to elevate rectangles, then swap arr[%d] with pivot[%d]\n",
+                   finalPivotPos, data->pivotIndex);
+
+            return;
+        }
+
+        if (!data->comparing && !data->pivotSwapping && !data->pivotInSortedRegion)
+        {
+            printf("Wait for the next comparison phase or pivot action\n");
             return;
         }
 
@@ -122,7 +172,14 @@ void QuickSortUpdate(GameData *game)
         // Handle pivot swapping phase
         if (data->pivotSwapping)
         {
-            int finalPivotPos = data->i + 1;
+            // Check if elevation is required first
+            if (!data->manualElevation)
+            {
+                printf("Press T to elevate rectangles before swapping!\n");
+                return;
+            }
+
+            int finalPivotPos = data->i; // i was already incremented
 
             // Check if player is on one of the positions to swap
             if (onSquare != finalPivotPos && onSquare != data->pivotIndex)
@@ -158,12 +215,15 @@ void QuickSortUpdate(GameData *game)
                         printf("🎉 PERFECT! Pivot swapped correctly to position %d!\n", finalPivotPos);
                         data->swaps++;
                         data->pivotSwapping = false;
+                        data->manualElevation = false;
                         data->hideOtherValues = false;
                         data->partitionComplete = true;
                         data->partitionsCompleted++;
 
                         // Mark this position as having a completed pivot
                         data->completedPivots[finalPivotPos] = true;
+
+                        printf("✓ Pivot automatically falls into sorted region after swapping!\n");
 
                         // Add sub-arrays to stack
                         if (finalPivotPos - 1 > data->low)
@@ -196,23 +256,73 @@ void QuickSortUpdate(GameData *game)
             return; // Exit after handling pivot swapping
         }
 
-        // Handle regular comparison phase swapping
-        // In traditional Lomuto: swap happens between arr[i+1] and arr[j]
-        int swapPos1 = data->i + 1; // This is where smaller elements should go
-        int swapPos2 = data->j;     // Current element being compared
-
-        // Check if player is on one of the swap positions
-        if (onSquare != swapPos1 && onSquare != swapPos2)
+        // Handle moving pivot to sorted region
+        if (data->pivotInSortedRegion)
         {
-            printf("You must stand on position %d (i+1=%d) or %d (j) to swap\n",
-                   swapPos1, data->i + 1, swapPos2);
-            return;
+            int finalPivotPos = data->i + 1; // For pivotInSortedRegion case, i wasn't incremented yet
+
+            printf("DEBUG: Handling pivotInSortedRegion - finalPivotPos=%d, onSquare=%d, carrying=%s\n",
+                   finalPivotPos, onSquare, game->carrying ? "true" : "false");
+
+            // Check if player is on the pivot position
+            if (onSquare != finalPivotPos)
+            {
+                printf("You must stand on position %d (pivot position) to move it to sorted region\n", finalPivotPos);
+                return;
+            }
+
+            // Handle picking up/placing the pivot
+            if (!game->carrying && game->array[onSquare] != 0)
+            {
+                // Pick up the pivot
+                game->playerNumber = game->array[onSquare];
+                game->array[onSquare] = 0;
+                game->carrying = true;
+                printf("Picked up pivot %d. Press F again to drop it in sorted region.\n", game->playerNumber);
+            }
+            else if (game->carrying && game->array[onSquare] == 0)
+            {
+                // Place the pivot back in sorted region
+                game->array[onSquare] = game->playerNumber;
+                game->playerNumber = 0;
+                game->carrying = false;
+                data->pivotInSortedRegion = false;
+                data->partitionComplete = true;
+                data->partitionsCompleted++;
+
+                // Mark this position as having a completed pivot
+                data->completedPivots[finalPivotPos] = true;
+
+                printf("✓ Pivot placed in sorted region! Partition complete.\n");
+
+                // Add sub-arrays to stack
+                if (finalPivotPos - 1 > data->low)
+                {
+                    PushStack(data, data->low, finalPivotPos - 1);
+                }
+                if (finalPivotPos + 1 < data->high)
+                {
+                    PushStack(data, finalPivotPos + 1, data->high);
+                }
+
+                // Start next partition
+                StartNewPartition(data, game);
+            }
+            else
+            {
+                printf("DEBUG: Unexpected state - carrying=%s, array[%d]=%d\n",
+                       game->carrying ? "true" : "false", onSquare, game->array[onSquare]);
+            }
+            return; // Exit after handling sorted region placement
         }
 
-        // Check if swap is actually needed
+        // Handle regular comparison phase
+        // In Lomuto: when arr[j] < pivot, increment i first, then player swaps manually
+
+        // Check if swap is needed
         if (!data->needsSwap)
         {
-            printf("Wrong! arr[j]=%d >= pivot=%d, no swap needed. Lost a heart!\n",
+            printf("Wrong! arr[j]=%d >= pivot=%d, no swap needed. Use G to skip. Lost a heart!\n",
                    data->originalJValue, data->originalPivotValue);
             game->hearts--;
             if (game->hearts <= 0)
@@ -222,7 +332,58 @@ void QuickSortUpdate(GameData *game)
             return;
         }
 
-        // Handle the swapping process
+        // Check if we need to increment i first
+        if (!data->waitingForSwap)
+        {
+            // Player must be on j position to start the swap process
+            if (onSquare != data->j)
+            {
+                printf("You must stand on position %d (j) to start swap process\n", data->j);
+                return;
+            }
+
+            // First step: increment i (move partition boundary)
+            data->i++;
+
+            printf("✓ i moved to %d! ", data->i);
+
+            // Check if i and j are at the same position
+            if (data->i == data->j)
+            {
+                // Automatic swap (animation-like) - no manual interaction needed
+                printf("i and j are at the same position - automatic swap!\n");
+                printf("✓ Automatic swap complete! arr[%d] stays in place\n", data->i);
+
+                data->swaps++;
+                data->waitingForSwap = false; // No need to wait for manual swap
+
+                CompleteComparison(data, game);
+                return;
+            }
+            else
+            {
+                // Different positions - manual swap required
+                printf("Now manually swap arr[i]=%d with arr[j]=%d\n",
+                       game->array[data->i], game->array[data->j]);
+                data->waitingForSwap = true;
+
+                return;
+            }
+        }
+
+        // Second step: handle manual swapping between arr[i] and arr[j]
+        int swapPos1 = data->i; // Position i (where smaller element should go)
+        int swapPos2 = data->j; // Position j (current element being compared)
+
+        // Check if player is on one of the swap positions
+        if (onSquare != swapPos1 && onSquare != swapPos2)
+        {
+            printf("You must stand on position %d (i) or %d (j) to swap\n",
+                   swapPos1, swapPos2);
+            return;
+        }
+
+        // Handle the manual swapping process
         if (!game->carrying && game->array[onSquare] != 0)
         {
             // Pick up number from current platform
@@ -242,16 +403,13 @@ void QuickSortUpdate(GameData *game)
             // Check if swap is complete (both positions filled)
             if (game->array[swapPos1] != 0 && game->array[swapPos2] != 0)
             {
-                // Verify swap was done correctly: smaller element should be at i+1
+                // Verify swap was done correctly: smaller element should be at i
                 if (game->array[swapPos1] < game->array[data->pivotIndex])
                 {
-                    printf("✓ Correct swap! arr[i+1]=%d < pivot=%d\n",
+                    printf("✓ Correct swap! arr[i]=%d < pivot=%d\n",
                            game->array[swapPos1], game->array[data->pivotIndex]);
                     data->swaps++;
-                    data->i++; // Increment i after successful swap
-
-                    // Update platform positions after partition boundary changes
-                    CalculateQuickSortBoxPositions(game->platforms, game->arraySize, game);
+                    data->waitingForSwap = false; // Reset for next comparison
 
                     CompleteComparison(data, game);
                 }
@@ -271,7 +429,7 @@ void QuickSortUpdate(GameData *game)
         }
     }
 
-    // Handle G key for skipping (when no swap needed)
+    // Handle G key for moving j forward (when no swap needed)
     if (IsKeyPressed(KEY_G))
     {
         if (!data->comparing)
@@ -287,16 +445,16 @@ void QuickSortUpdate(GameData *game)
             return;
         }
 
-        // Player must be on j position to skip
+        // Player must be on j position to move j forward
         if (onSquare != data->j)
         {
-            printf("You must stand on position %d (j) to skip\n", data->j);
+            printf("You must stand on position %d (j) to move j forward\n", data->j);
             return;
         }
 
         if (data->needsSwap)
         {
-            printf("Wrong! arr[j]=%d < pivot=%d, swap is needed. Lost a heart!\n",
+            printf("Wrong! arr[j]=%d < pivot=%d, swap is needed. Use F key. Lost a heart!\n",
                    data->originalJValue, data->originalPivotValue);
             game->hearts--;
             if (game->hearts <= 0)
@@ -306,9 +464,9 @@ void QuickSortUpdate(GameData *game)
         }
         else
         {
-            printf("✓ Correct! arr[j]=%d >= pivot=%d, no swap needed\n",
+            printf("✓ Correct! arr[j]=%d >= pivot=%d, moving j forward\n",
                    data->originalJValue, data->originalPivotValue);
-            // Don't increment i when skipping
+            // Don't increment i when skipping, just move j forward
             CompleteComparison(data, game);
         }
     }
@@ -330,32 +488,60 @@ void QuickSortGetStats(GameData *game, AlgorithmStats *stats)
 
     // Instructions based on current state
     stats->hasInstruction = true;
-    if (data->comparing)
+    if (data->needsIncrementI)
+    {
+        strcpy(stats->instructionText, "📈 Press F to increment i (move partition boundary) before pivot swap");
+        stats->instructionColor = YELLOW;
+    }
+    else if (data->pivotInSortedRegion)
+    {
+        strcpy(stats->instructionText, "🔽 Pivot already in place! Press F to move to sorted region");
+        stats->instructionColor = GAME_SORTED;
+    }
+    else if (data->pivotSwapping)
+    {
+        if (!data->manualElevation)
+        {
+            strcpy(stats->instructionText, "🔺 Press T to elevate rectangles for pivot swapping");
+            stats->instructionColor = YELLOW;
+        }
+        else
+        {
+            strcpy(stats->instructionText, "🎯 PIVOT SWAPPING: Press F to swap (will auto-fall after)!");
+            stats->instructionColor = YELLOW;
+        }
+    }
+    else if (data->comparing)
     {
         if (data->needsSwap)
         {
-            if (game->carrying)
+            if (data->waitingForSwap)
             {
-                strcpy(stats->instructionText, "SWAPPING: Press F to place/swap numbers");
-                stats->instructionColor = GAME_COMPARING;
+                if (game->carrying)
+                {
+                    strcpy(stats->instructionText, "SWAPPING: Press F to place/swap numbers between i and j");
+                    stats->instructionColor = GAME_COMPARING;
+                }
+                else
+                {
+                    sprintf(stats->instructionText, "MANUAL SWAP: i=%d, j=%d - swap arr[i] with arr[j] (Press F)",
+                            data->i, data->j);
+                    stats->instructionColor = GAME_COMPARING;
+                }
             }
             else
             {
-                sprintf(stats->instructionText, "SWAPPING NEEDED: arr[j]=%d < pivot=%d - Press F to pick up",
+                sprintf(stats->instructionText, "SWAP NEEDED: arr[j]=%d < pivot=%d - Press F to move i and swap",
                         data->originalJValue, data->originalPivotValue);
                 stats->instructionColor = GAME_COMPARING;
             }
         }
         else
         {
-            strcpy(stats->instructionText, "Press G to SKIP - arr[j] >= pivot, no swap needed");
+            sprintf(stats->instructionText, "NO SWAP: arr[j]=%d >= pivot=%d - Press G to move j forward",
+                    data->originalJValue, data->originalPivotValue);
             stats->instructionColor = GAME_SORTED;
         }
-    }
-    else if (data->pivotSwapping)
-    {
-        strcpy(stats->instructionText, "🎯 PIVOT SWAPPING: Press F to swap pivot to final position!");
-        stats->instructionColor = YELLOW;
     }
     else
     {
@@ -376,7 +562,7 @@ void QuickSortRender(GameData *game)
 
     if (data->comparing)
     {
-        // Highlight positions in traditional Lomuto algorithm
+        // Highlight positions in Lomuto algorithm
         if (data->j < game->arraySize)
         {
             // Highlight j (current element being compared) in bright orange
@@ -384,40 +570,34 @@ void QuickSortRender(GameData *game)
             DrawRectangleLinesEx(game->platforms[data->j], 4, brightOrange);
         }
 
-        if (data->needsSwap && data->i + 1 < game->arraySize)
+        // During manual swapping phase, highlight both i and j positions
+        if (data->waitingForSwap && data->i >= 0 && data->i < game->arraySize)
         {
-            // Highlight i+1 (where smaller element should go) in bright cyan
-            Color brightCyan = {0, 255, 255, 255}; // Bright cyan for high visibility
-            DrawRectangleLinesEx(game->platforms[data->i + 1], 4, brightCyan);
+            Color brightGreen = {0, 255, 0, 255}; // Bright green for i position
+            DrawRectangleLinesEx(game->platforms[data->i], 4, brightGreen);
         }
     }
     else if (data->pivotSwapping)
     {
-        int finalPivotPos = data->i + 1;
+        int finalPivotPos = data->i; // i was already incremented
         // Highlight the two positions that need to be swapped
         Color brightCyan = {0, 255, 255, 255};                                     // Bright cyan for final position
         Color brightMagenta = {255, 0, 255, 255};                                  // Bright magenta for current pivot
         DrawRectangleLinesEx(game->platforms[finalPivotPos], 4, brightCyan);       // Final position
         DrawRectangleLinesEx(game->platforms[data->pivotIndex], 4, brightMagenta); // Current pivot
     }
+    else if (data->needsIncrementI)
+    {
+        // Highlight j position to indicate where user should press F to increment i
+        Color brightYellow = {255, 255, 0, 255}; // Bright yellow for j position
+        DrawRectangleLinesEx(game->platforms[data->j], 4, brightYellow);
+    }
 
     // Fill pivot box with light red
     Color lightRed = {255, 150, 150, 128}; // Light red with some transparency
     DrawRectangleRec(game->platforms[data->pivotIndex], lightRed);
 
-    // Highlight i boundary (elements <= i are smaller than pivot)
-    for (int idx = data->low; idx <= data->i && idx < game->arraySize; idx++)
-    {
-        DrawRectangleLinesEx(game->platforms[idx], 2, DARKGREEN);
-    }
-
-    // Draw partition separators and labels - REMOVED FOR CLEANER UI
-    // Separator lines and indicators removed to improve visual clarity
-
-    // Draw i and j indicators below the boxes for better understanding - ALWAYS VISIBLE
-    // Handle overlapping by placing labels side by side within rectangle width
-
-    // Collect all labels that need to be drawn at each position
+    // Draw i and j as rectangular bars instead of text labels
     for (int pos = 0; pos < game->arraySize; pos++)
     {
         Rectangle platform = game->platforms[pos];
@@ -432,104 +612,80 @@ void QuickSortRender(GameData *game)
             platform.y += BOX_SIZE + (BOX_SIZE / 2);
         }
 
-        float baseY = platform.y + platform.height + 10;
+        float baseY = platform.y + platform.height; // No gap - start right after platform
+        float barWidth = platform.width;            // Same width as platform (full length)
+        float barHeight = platform.width / 4;       // Height is 1/4 of platform width (bar-like)
 
-        // Collect labels for this position
-        char labels[4][10] = {"", "", "", ""}; // Max 4 labels: i, j, i+1, pivot
-        Color colors[4] = {{0}, {0}, {0}, {0}};
-        int labelCount = 0;
-
-        // Check for "j"
+        // Draw j bar (orange/yellow)
         if (data->j == pos)
         {
-            strcpy(labels[labelCount], "j");
-            colors[labelCount] = (Color){200, 100, 0, 255}; // Dark orange
-            labelCount++;
+            Color jColor = {255, 165, 0, 255}; // Orange color for j
+            Rectangle jBar = {
+                platform.x, // Same x position as platform
+                baseY,      // Directly attached to platform bottom
+                barWidth,
+                barHeight};
+            DrawRectangleRec(jBar, jColor);
+            DrawRectangleLinesEx(jBar, 2, BLACK); // Black outline
+
+            // Draw "j" text on the bar
+            int textWidth = MeasureText("j", 16);
+            DrawText("j",
+                     jBar.x + (jBar.width - textWidth) / 2,
+                     jBar.y + (jBar.height - 16) / 2,
+                     16, WHITE);
         }
 
-        // Check for "i"
+        // Draw i bar (green) - same horizontal level as j bar
         if (data->i == pos && data->i >= 0)
         {
-            strcpy(labels[labelCount], "i");
-            colors[labelCount] = (Color){0, 100, 0, 255}; // Dark green
-            labelCount++;
+            Color iColor = {0, 180, 0, 255}; // Green color for i
+            Rectangle iBar = {
+                platform.x, // Same x position as platform
+                baseY,      // Same level as j bar - directly attached to platform bottom
+                barWidth,
+                barHeight};
+            DrawRectangleRec(iBar, iColor);
+            DrawRectangleLinesEx(iBar, 2, BLACK); // Black outline
+
+            // Draw "i" text on the bar
+            int textWidth = MeasureText("i", 16);
+            DrawText("i",
+                     iBar.x + (iBar.width - textWidth) / 2,
+                     iBar.y + (iBar.height - 16) / 2,
+                     16, WHITE);
         }
 
-        // Check for "i+1"
-        if (data->i + 1 == pos && data->i + 1 >= 0)
-        {
-            strcpy(labels[labelCount], "i+1");
-            colors[labelCount] = (data->comparing && data->needsSwap) ? (Color){0, 150, 200, 255} : // Darker cyan when swap needed
-                                     (Color){0, 100, 180, 255};                                     // Darker blue otherwise
-            labelCount++;
-        }
-
-        // Check for "pivot"
+        // Draw pivot indicator (keeping this as text since it's different)
         if (data->pivotIndex == pos)
         {
-            strcpy(labels[labelCount], "pivot");
-            colors[labelCount] = (Color){180, 50, 50, 255}; // Dark red
-            labelCount++;
-        }
-
-        // Check for additional "i+1" during pivot swapping
-        if (data->pivotSwapping && data->i + 1 == pos && data->i + 1 != data->pivotIndex)
-        {
-            strcpy(labels[labelCount], "i+1");
-            colors[labelCount] = (Color){0, 150, 200, 255}; // Dark cyan
-            labelCount++;
-        }
-
-        // Draw labels side by side if multiple labels at same position
-        if (labelCount > 0)
-        {
-            float totalWidth = 0;
-            int fontSize = FONT_SIZE_SMALL; // Smaller font size
-
-            // Calculate total width of all labels with spaces
-            for (int i = 0; i < labelCount; i++)
-            {
-                totalWidth += MeasureText(labels[i], fontSize);
-                if (i < labelCount - 1)
-                    totalWidth += 8; // Space between labels
-            }
-
-            // Ensure labels fit within rectangle width
-            if (totalWidth > platform.width)
-            {
-                fontSize = 16; // Even smaller if needed
-                totalWidth = 0;
-                for (int i = 0; i < labelCount; i++)
-                {
-                    totalWidth += MeasureText(labels[i], fontSize);
-                    if (i < labelCount - 1)
-                        totalWidth += 6; // Smaller space
-                }
-            }
-
-            // Start position for labels (centered under the rectangle)
-            float startX = platform.x + (platform.width - totalWidth) / 2;
-            float currentX = startX;
-
-            // Draw each label
-            for (int i = 0; i < labelCount; i++)
-            {
-                int textWidth = MeasureText(labels[i], fontSize);
-                DrawText(labels[i], currentX, baseY + 15, fontSize, colors[i]);
-                currentX += textWidth + (fontSize == FONT_SIZE_SMALL ? 8 : 6);
-            }
+            Color pivotColor = {180, 50, 50, 255}; // Dark red
+            DrawText("pivot", platform.x + (platform.width - MeasureText("pivot", FONT_SIZE_SMALL)) / 2,
+                     baseY + barHeight + 5, FONT_SIZE_SMALL, pivotColor); // Below the bar level with small gap
         }
     }
 
-    // Handle special case: "i" at position -1
+    // Handle special case: "i" at position -1 (draw bar to the left of first platform)
     if (data->i == -1)
     {
         Rectangle firstPlatform = game->platforms[0];
-        float iLabelX = firstPlatform.x - 40; // 40 pixels to the left
-        float iLabelY = firstPlatform.y + firstPlatform.height + 10;
+        float barWidth = firstPlatform.width;      // Same width as platform
+        float barHeight = firstPlatform.width / 4; // Height is 1/4 of platform width
 
-        Color darkGreen = {0, 100, 0, 255};
-        DrawText("i", iLabelX, iLabelY + 15, FONT_SIZE_SMALL, darkGreen);
+        Color iColor = {0, 180, 0, 255}; // Green color for i
+        Rectangle iBar = {
+            firstPlatform.x - barWidth - 10,        // To the left of first platform
+            firstPlatform.y + firstPlatform.height, // Same level as other bars - attached to platform bottom
+            barWidth,
+            barHeight};
+        DrawRectangleRec(iBar, iColor);
+        DrawRectangleLinesEx(iBar, 2, BLACK);
+
+        int textWidth = MeasureText("i", 16);
+        DrawText("i",
+                 iBar.x + (iBar.width - textWidth) / 2,
+                 iBar.y + (iBar.height - 16) / 2,
+                 16, WHITE);
     }
 
     // Highlight current player platform if they can interact
@@ -539,13 +695,30 @@ void QuickSortRender(GameData *game)
         bool canInteract = false;
         if (data->comparing)
         {
-            canInteract = (playerPlatform == data->j) ||
-                          (data->needsSwap && playerPlatform == data->i + 1);
+            // Player can interact if they're on j position (to start) or on i/j positions (during swap)
+            if (data->waitingForSwap)
+            {
+                canInteract = (playerPlatform == data->i || playerPlatform == data->j);
+            }
+            else
+            {
+                canInteract = (playerPlatform == data->j);
+            }
+        }
+        else if (data->needsIncrementI)
+        {
+            // Player can interact from j position to increment i
+            canInteract = (playerPlatform == data->j);
         }
         else if (data->pivotSwapping)
         {
-            int finalPivotPos = data->i + 1;
+            int finalPivotPos = data->i; // i was already incremented
             canInteract = (playerPlatform == finalPivotPos || playerPlatform == data->pivotIndex);
+        }
+        else if (data->pivotInSortedRegion)
+        {
+            int finalPivotPos = data->i + 1; // For this case, i wasn't incremented yet
+            canInteract = (playerPlatform == finalPivotPos);
         }
 
         if (canInteract)
@@ -571,7 +744,28 @@ void QuickSortCleanup(GameData *game)
 
 bool QuickSortIsComplete(GameData *game)
 {
-    return IsArraySorted(game->array, game->arraySize, true);
+    if (!game || !game->algorithmData)
+        return false;
+
+    QuickSortData *data = (QuickSortData *)game->algorithmData;
+
+    bool arrayIsSorted = IsArraySorted(game->array, game->arraySize, true);
+    bool stackIsEmpty = (data->stackTop == -1);
+    bool notInOperation = (!data->comparing && !data->pivotSwapping && !data->pivotInSortedRegion);
+
+    // Debug output when array becomes sorted but algorithm isn't complete
+    if (arrayIsSorted && (!stackIsEmpty || !notInOperation))
+    {
+        printf("DEBUG: Array is sorted but QuickSort not complete - stackTop=%d, comparing=%s, pivotSwapping=%s, pivotInSortedRegion=%s\n",
+               data->stackTop, data->comparing ? "true" : "false",
+               data->pivotSwapping ? "true" : "false", data->pivotInSortedRegion ? "true" : "false");
+    }
+
+    // QuickSort is complete when:
+    // 1. The array is sorted AND
+    // 2. No more partitions to process (stack is empty) AND
+    // 3. Not in the middle of any operation
+    return arrayIsSorted && stackIsEmpty && notInOperation;
 }
 
 void QuickSortResetLevel(GameData *game, int level)
@@ -593,6 +787,9 @@ void QuickSortResetLevel(GameData *game, int level)
         data->waitingForSwap = false;
         data->pivotSwapping = false;
         data->hideOtherValues = false;
+        data->manualElevation = false;
+        data->pivotInSortedRegion = false;
+        data->needsIncrementI = false;
 
         data->comparisons = 0;
         data->swaps = 0;
@@ -702,9 +899,6 @@ static void StartNewPartition(QuickSortData *data, GameData *game)
         printf("Starting new partition [%d...%d]: i=%d, j=%d, pivot=%d\n",
                data->low, data->high, data->i, data->j, data->originalPivotValue);
 
-        // Update platform positions for new partition
-        CalculateQuickSortBoxPositions(game->platforms, game->arraySize, game);
-
         StartComparison(data, game);
     }
     else
@@ -745,34 +939,24 @@ static void CompleteComparison(QuickSortData *data, GameData *game)
         int finalPivotPos = data->i + 1;
         if (finalPivotPos != data->pivotIndex)
         {
-            // Enter pivot swapping mode - user must swap manually
-            data->pivotSwapping = true;
-            data->hideOtherValues = false; // Keep values visible during pivot swapping
+            // Enter pre-pivot-swap mode - user must first press F to increment i
+            data->needsIncrementI = true;
+            data->pivotSwapping = false;   // Not yet in swapping mode
+            data->manualElevation = false; // Reset elevation state
+            data->hideOtherValues = false; // Keep values visible
             data->comparing = false;
-            printf("🎯 TIME TO SWAP PIVOT! Swap arr[i+1=%d] with pivot[%d]\n", finalPivotPos, data->pivotIndex);
-            printf("Values remain visible during pivot swap!\n");
+            printf("🎯 READY FOR PIVOT SWAP! First press F to increment i (i+1 becomes final pivot position)\n");
+            printf("Current i=%d, will become i=%d after F key press\n", data->i, data->i + 1);
         }
         else
         {
-            // Pivot is already in correct position, proceed directly
-            data->partitionComplete = true;
-            data->partitionsCompleted++;
-
-            // Mark this position as having a completed pivot
-            data->completedPivots[finalPivotPos] = true;
-
-            // Add sub-arrays to stack
-            if (finalPivotPos - 1 > data->low)
-            {
-                PushStack(data, data->low, finalPivotPos - 1);
-            }
-            if (finalPivotPos + 1 < data->high)
-            {
-                PushStack(data, finalPivotPos + 1, data->high);
-            }
-
-            // Start next partition
-            StartNewPartition(data, game);
+            // Pivot is already in correct position, user must manually move it to sorted region
+            data->partitionComplete = false;
+            data->pivotInSortedRegion = true; // User must press F to move to sorted region
+            data->pivotSwapping = false;      // Make sure we're not in swapping mode
+            data->needsIncrementI = false;    // No need to increment i
+            data->comparing = false;
+            printf("✓ Pivot is already in correct position at %d! Press F to move it to sorted region.\n", finalPivotPos);
         }
     }
     else
@@ -809,10 +993,10 @@ bool QuickSortIsSwappingElement(GameData *game, int position)
         return false;
 
     QuickSortData *data = (QuickSortData *)game->algorithmData;
-    if (!data->pivotSwapping)
+    if (!data->pivotSwapping || !data->manualElevation)
         return false;
 
-    // During pivot swapping, elevate the pivot and its final position
-    int finalPivotPos = data->i + 1;
+    // During pivot swapping with manual elevation, elevate the pivot and its final position
+    int finalPivotPos = data->i; // i was already incremented when we reach this state
     return (position == data->pivotIndex || position == finalPivotPos);
 }
