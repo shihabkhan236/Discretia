@@ -58,7 +58,7 @@ void UpdatePlayerMovement(GameData* game) {
     if ((IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) && game->isOnGround) {
         game->velocity.y = JUMP_FORCE;
         game->isOnGround = false;
-        printf("Player jumped\n");
+     
     }
     
 
@@ -100,8 +100,24 @@ void RenderPlayer(GameData* game) {
         int textY = game->player.y + (game->player.height - fontSize) / 2;
 
         DrawText(numText, textX, textY, fontSize, BLACK);
-        // DrawCenteredText(numText, textX, textY, fontSize, BLACK);
-        
-        
+    }
+    
+    // For merge sort algorithm, check if player is carrying a number
+    if (game->selectedAlgorithm == ALGO_MERGE_SORT) {
+        if (MergeSortIsCarryingNumber(game)) {
+            int carriedNumber = MergeSortGetCarriedNumber(game);
+            if (carriedNumber > 0) {
+                char numText[16];
+                sprintf(numText, "%d", carriedNumber);
+                
+                // Calculate centered position using default font
+                int fontSize = 32;
+                int textWidth = MeasureText(numText, fontSize);
+                int textX = game->player.x + (game->player.width - textWidth) / 2;
+                int textY = game->player.y + (game->player.height - fontSize) / 2;
+
+                DrawText(numText, textX, textY, fontSize, BLACK);
+            }
+        }
     }
 }
