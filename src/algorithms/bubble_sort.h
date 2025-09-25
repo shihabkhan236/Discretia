@@ -22,6 +22,7 @@ typedef struct
 void BubbleSortInit(GameData *game);
 void BubbleSortUpdate(GameData *game);
 void BubbleSortRender(GameData *game);
+void BubbleSortGetStats(GameData *game, AlgorithmStats *stats);
 void BubbleSortCleanup(GameData *game);
 bool BubbleSortIsComplete(GameData *game);
 void BubbleSortResetLevel(GameData *game, int level);

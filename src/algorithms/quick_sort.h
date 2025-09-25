@@ -45,6 +45,7 @@ typedef struct
 void QuickSortInit(GameData *game);
 void QuickSortUpdate(GameData *game);
 void QuickSortRender(GameData *game);
+void QuickSortGetStats(GameData *game, AlgorithmStats *stats);
 void QuickSortCleanup(GameData *game);
 bool QuickSortIsComplete(GameData *game);
 void QuickSortResetLevel(GameData *game, int level);

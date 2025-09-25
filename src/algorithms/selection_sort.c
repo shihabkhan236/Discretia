@@ -6,6 +6,7 @@
 #include "../core/player.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 
@@ -145,29 +146,43 @@ void SelectionSortUpdate(GameData* game) {
     }
 }
 
+void SelectionSortGetStats(GameData* game, AlgorithmStats* stats) {
+    SelectionSortData* data = (SelectionSortData*)game->algorithmData;
+    if (!data) return;
+    
+    // Primary stat: Comparisons, swaps, mistakes
+    sprintf(stats->primaryStat, "Comparisons: %d | Swaps: %d | Mistakes: %d", 
+            data->comparisons, data->swaps, data->mistakes);
+    
+    // Secondary stat and instructions based on algorithm state
+    stats->hasInstruction = true;
+    if (data->findingMinimum && !game->carrying) {
+        sprintf(stats->secondaryStat, "Unsorted section: positions %d to %d", 
+                data->sortedBoundary, game->arraySize - 1);
+        strcpy(stats->instructionText, "Find and press F on the MINIMUM element in the unsorted section");
+        stats->instructionColor = UI_TEXT_PRIMARY;
+    } else if (data->swapping && game->carrying) {
+        sprintf(stats->secondaryStat, "Swapping minimum to position %d", data->sortedBoundary);
+        sprintf(stats->instructionText, "Press F on position %d to swap minimum into sorted section", 
+                data->sortedBoundary);
+        stats->instructionColor = GAME_COMPARING;
+    } else if (game->carrying) {
+        strcpy(stats->secondaryStat, "Placing element back");
+        strcpy(stats->instructionText, "Press F on an empty box to place the number");
+        stats->instructionColor = UI_TEXT_PRIMARY;
+    } else {
+        strcpy(stats->secondaryStat, "");
+        stats->hasInstruction = false;
+    }
+    
+    strcpy(stats->goalText, "Goal: Sort numbers in ascending order (1, 2, 3, 4...)");
+}
+
 void SelectionSortRender(GameData* game) {
     SelectionSortData* data = (SelectionSortData*)game->algorithmData;
     if (!data) return;
     
-    // Draw algorithm-specific UI
-    char statsText[128];
-    sprintf(statsText, "Comparisons: %d | Swaps: %d | Mistakes: %d", data->comparisons, data->swaps, data->mistakes);
-    DrawText(statsText, 20, 120, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-    
-    // Show instructions based on algorithm state
-    if (data->findingMinimum && !game->carrying) {
-        DrawText("Find and press F on the MINIMUM element in the unsorted section", 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-        char boundaryText[64];
-        sprintf(boundaryText, "Unsorted section: positions %d to %d", data->sortedBoundary, game->arraySize - 1);
-        DrawText(boundaryText, 20, 160, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-    } else if (data->swapping && game->carrying) {
-        char swapText[64];
-        sprintf(swapText, "Press F on position %d to swap minimum into sorted section", data->sortedBoundary);
-        DrawText(swapText, 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-    } else if (game->carrying) {
-        DrawText("Press F on an empty box to place the number", 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-    }
-    DrawText("Goal: Sort numbers in ascending order (1, 2, 3, 4...)", 20, 180, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
+    // Only render visual highlights and game objects, no text UI
     
     // Highlight sorted section in green
     for (int i = 0; i < data->sortedBoundary; i++) {
@@ -175,10 +190,6 @@ void SelectionSortRender(GameData* game) {
             DrawRectangleLinesEx(game->platforms[i], 3, GAME_SORTED);
         }
     }
-    
-   
-    
-   
     
     // Show correct positions when H key is held
     if (IsKeyDown(KEY_H)) {
@@ -192,8 +203,6 @@ void SelectionSortRender(GameData* game) {
             }
         }
     }
-    
-
 }
 
 void SelectionSortCleanup(GameData* game) {

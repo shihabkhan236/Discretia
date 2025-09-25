@@ -6,6 +6,7 @@
 #include "../core/player.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 void InsertionSortInit(GameData *game)
@@ -366,45 +367,61 @@ void InsertionSortUpdate(GameData *game)
     }
 }
 
+void InsertionSortGetStats(GameData *game, AlgorithmStats *stats)
+{
+    InsertionSortData *data = (InsertionSortData *)game->algorithmData;
+    if (!data) return;
+
+    // Primary stat: Comparisons, shifts, mistakes
+    sprintf(stats->primaryStat, "Comparisons: %d | Shifts: %d | Mistakes: %d", 
+            data->comparisons, data->shifts, data->mistakes);
+
+    // Secondary stat and instructions based on algorithm state
+    stats->hasInstruction = true;
+    if (data->pickingElement && !game->carrying && data->currentIndex < game->arraySize)
+    {
+        sprintf(stats->secondaryStat, "Element at position %d: %d", 
+                data->currentIndex, game->array[data->currentIndex]);
+
+        if (data->canSkip)
+        {
+            strcpy(stats->instructionText, "Press G to SKIP (already in correct position) | Press F to pick up");
+            stats->instructionColor = GAME_SORTED;
+        }
+        else
+        {
+            strcpy(stats->instructionText, "Press F to pick up the current element to insert");
+            stats->instructionColor = GAME_COMPARING;
+        }
+    }
+    else if (data->comparing && game->carrying)
+    {
+        strcpy(stats->secondaryStat, "Moving element to correct position");
+        strcpy(stats->instructionText, "Press F on adjacent elements to swap, or empty box to place");
+        stats->instructionColor = UI_TEXT_PRIMARY;
+    }
+    else if (game->carrying)
+    {
+        strcpy(stats->secondaryStat, "Placing element");
+        strcpy(stats->instructionText, "Press F on an empty box to place the element");
+        stats->instructionColor = UI_TEXT_PRIMARY;
+    }
+    else
+    {
+        strcpy(stats->secondaryStat, "");
+        stats->hasInstruction = false;
+    }
+
+    strcpy(stats->goalText, "Goal: Sort numbers in ascending order (1, 2, 3, 4...)");
+}
+
 void InsertionSortRender(GameData *game)
 {
     InsertionSortData *data = (InsertionSortData *)game->algorithmData;
     if (!data)
         return;
 
-    // Draw algorithm-specific UI
-    char statsText[128];
-    sprintf(statsText, "Comparisons: %d | Shifts: %d | Mistakes: %d", data->comparisons, data->shifts, data->mistakes);
-    DrawText(statsText, 20, 120, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-
-    // Show instructions based on algorithm state
-    if (data->pickingElement && !game->carrying && data->currentIndex < game->arraySize)
-    {
-        char pickText[64];
-        sprintf(pickText, "Element at position %d: %d", data->currentIndex, game->array[data->currentIndex]);
-        DrawText(pickText, 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-
-        if (data->canSkip)
-        {
-            DrawText("Press G to SKIP (already in correct position) | Press F to pick up", 20, 160, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-            DrawText("Element is correctly positioned - you can skip it!", 20, 180, FONT_SIZE_SMALL, GAME_SORTED);
-        }
-        else
-        {
-            DrawText("Press F to pick up the current element to insert", 20, 160, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-            DrawText("This element needs to be moved to its correct position", 20, 180, FONT_SIZE_SMALL, GAME_COMPARING);
-        }
-    }
-    else if (data->comparing && game->carrying)
-    {
-        DrawText("Move element to correct position using adjacent swaps", 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-        DrawText("Press F on adjacent elements to swap, or empty box to place", 20, 160, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-    }
-    else if (game->carrying)
-    {
-        DrawText("Press F on an empty box to place the element", 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-    }
-    DrawText("Goal: Sort numbers in ascending order (1, 2, 3, 4...)", 20, 180, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
+    // Only render visual highlights and game objects, no text UI
 
     // Simple visual indicators - only show completed sorted section
     for (int i = 0; i < data->currentIndex && i < game->arraySize; i++)
@@ -440,7 +457,6 @@ void InsertionSortRender(GameData *game)
     {
         if (data->pickingElement && playerPlatform == data->currentIndex)
         {
-            
             DrawRectangleLinesEx(game->platforms[playerPlatform], 2, GAME_SELECTED);
         } 
     }

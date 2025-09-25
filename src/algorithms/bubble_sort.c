@@ -6,6 +6,7 @@
 #include "../core/player.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 void BubbleSortInit(GameData *game)
@@ -240,46 +241,60 @@ void BubbleSortUpdate(GameData *game)
     }
 }
 
+void BubbleSortGetStats(GameData *game, AlgorithmStats *stats)
+{
+    BubbleSortData *data = (BubbleSortData *)game->algorithmData;
+    if (!data) return;
+
+    // Primary stat: Pass, comparisons, swaps
+    sprintf(stats->primaryStat, "Pass: %d | Comparisons: %d | Swaps: %d", 
+            data->currentI + 1, data->comparisons, data->swaps);
+
+    // Secondary stat and instructions based on current state
+    if (data->comparing)
+    {
+        sprintf(stats->secondaryStat, "Comparing %d and %d", data->originalLeft, data->originalRight);
+
+        bool needsSwap = data->originalLeft > data->originalRight;
+        stats->hasInstruction = true;
+
+        if (needsSwap)
+        {
+            if (game->carrying)
+            {
+                strcpy(stats->instructionText, "SWAPPING: Press F to place/swap numbers");
+                stats->instructionColor = GAME_COMPARING;
+            }
+            else
+            {
+                strcpy(stats->instructionText, "SWAPPING NEEDED: Press F to pick up a number");
+                stats->instructionColor = GAME_COMPARING;
+            }
+        }
+        else
+        {
+            strcpy(stats->instructionText, "Press G to SKIP - numbers already in correct order");
+            stats->instructionColor = GAME_SORTED;
+        }
+    }
+    else
+    {
+        strcpy(stats->secondaryStat, "Moving to next comparison...");
+        stats->hasInstruction = false;
+    }
+
+    strcpy(stats->goalText, "Goal: Sort numbers in ascending order using bubble sort");
+}
+
 void BubbleSortRender(GameData *game)
 {
     BubbleSortData *data = (BubbleSortData *)game->algorithmData;
     if (!data)
         return;
 
-    // Draw algorithm-specific UI
-    char statsText[128];
-    sprintf(statsText, "Pass: %d | Comparisons: %d | Swaps: %d", data->currentI + 1, data->comparisons, data->swaps);
-    DrawText(statsText, 20, 120, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-
-    // Show current comparison state
+    // Only render visual highlights and game objects, no text UI
     if (data->comparing)
     {
-        char compText[128];
-        sprintf(compText, "Comparing %d and %d", data->originalLeft, data->originalRight);
-        DrawText(compText, 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-
-        // Show instructions based on player state and what's needed (use original values)
-        bool needsSwap = data->originalLeft > data->originalRight;
-
-        if (needsSwap)
-        {
-            if (game->carrying)
-            {
-                DrawText("SWAPPING: Press F to place/swap numbers", 20, 160, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-                DrawText("Complete the swap by moving numbers around", 20, 180, FONT_SIZE_SMALL, GAME_COMPARING);
-            }
-            else
-            {
-                DrawText("SWAPPING NEEDED: Press F to pick up a number", 20, 160, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-                DrawText("Left number is larger - start swapping!", 20, 180, FONT_SIZE_SMALL, GAME_COMPARING);
-            }
-        }
-        else
-        {
-            DrawText("Press G to SKIP - numbers already in correct order", 20, 160, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-            DrawText("No swap needed here!", 20, 180, FONT_SIZE_SMALL, GAME_SORTED);
-        }
-
         // Highlight the positions being compared
         if (data->currentJ < game->arraySize && data->currentJ + 1 < game->arraySize)
         {
@@ -287,12 +302,6 @@ void BubbleSortRender(GameData *game)
             DrawRectangleLinesEx(game->platforms[data->currentJ + 1], 3, BUBBLE_COMPARE);
         }
     }
-    else
-    {
-        DrawText("Moving to next comparison...", 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-    }
-
-    DrawText("Goal: Sort numbers in ascending order using bubble sort", 20, 200, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
 
     // Highlight sorted portion (elements that have "bubbled" to their final position)
     for (int i = game->arraySize - data->currentI; i < game->arraySize; i++)

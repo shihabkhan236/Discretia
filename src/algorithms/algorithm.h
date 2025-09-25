@@ -8,7 +8,8 @@
 typedef struct {
     void (*init)(GameData* game);
     void (*update)(GameData* game);
-    void (*render)(GameData* game);
+    void (*render)(GameData* game);        // Only renders game objects (platforms, highlights), not UI text
+    void (*getStats)(GameData* game, AlgorithmStats* stats);  // NEW: Get stats for centralized rendering
     void (*cleanup)(GameData* game);
     bool (*isComplete)(GameData* game);
     void (*resetLevel)(GameData* game, int level);

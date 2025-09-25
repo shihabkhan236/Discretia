@@ -29,6 +29,7 @@ typedef struct
 void InsertionSortInit(GameData *game);
 void InsertionSortUpdate(GameData *game);
 void InsertionSortRender(GameData *game);
+void InsertionSortGetStats(GameData *game, AlgorithmStats *stats);
 void InsertionSortCleanup(GameData *game);
 bool InsertionSortIsComplete(GameData *game);
 void InsertionSortResetLevel(GameData *game, int level);

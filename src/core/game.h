@@ -44,6 +44,16 @@ typedef enum
 typedef struct GameData GameData;
 typedef struct Algorithm Algorithm;
 
+// Centralized algorithm stats structure
+typedef struct {
+    char primaryStat[128];      // Main algorithm progress (e.g., "Pass: 2 | Comparisons: 5 | Swaps: 3")
+    char secondaryStat[128];    // Secondary info (e.g., "Comparing 4 and 2")
+    char instructionText[256];  // Current instruction (e.g., "Press F to pick up a number")
+    char goalText[128];         // Algorithm goal (e.g., "Goal: Sort numbers in ascending order")
+    Color instructionColor;     // Color for instruction text
+    bool hasInstruction;        // Whether instruction text should be displayed
+} AlgorithmStats;
+
 // Algorithm Interface
 struct Algorithm
 {

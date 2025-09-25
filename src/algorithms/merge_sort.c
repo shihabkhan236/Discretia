@@ -558,6 +558,67 @@ void MergeSortUpdate(GameData* game) {
     }
 }
 
+void MergeSortGetStats(GameData* game, AlgorithmStats* stats) {
+    MergeSortData* data = (MergeSortData*)game->algorithmData;
+    if (!data) return;
+    
+    // Primary stat: Phase information
+    const char* phaseText;
+    switch (data->currentPhase) {
+        case PHASE_SPLITTING:
+            phaseText = "PHASE: SPLITTING (Divide)";
+            break;
+        case PHASE_MERGING:
+            phaseText = "PHASE: MERGING (Conquer)";
+            break;
+        case PHASE_COMPLETE:
+            phaseText = "MERGE SORT COMPLETE!";
+            break;
+        default:
+            phaseText = "PHASE: Unknown";
+            break;
+    }
+    strcpy(stats->primaryStat, phaseText);
+    
+    // Secondary stat: Statistics
+    sprintf(stats->secondaryStat, "Splits: %d | Merges: %d | Max Level: %d | Recursion: %s", 
+            data->splitCount, data->mergeCount, data->maxLevel, 
+            data->recursionComplete ? "Complete" : "In Progress");
+    
+    // Instructions based on current phase and state
+    stats->hasInstruction = true;
+    if (data->currentPhase == PHASE_SPLITTING) {
+        if (data->currentFocusIndex == -1 && data->subarrayCount == 0) {
+            strcpy(stats->instructionText, "Stand on original array and press G to begin depth-first splitting");
+            stats->instructionColor = YELLOW;
+        } else if (data->currentFocusIndex >= 0 && data->currentFocusIndex < data->subarrayCount) {
+            Subarray* focused = &data->subarrays[data->currentFocusIndex];
+            if (focused->canSplit) {
+                strcpy(stats->instructionText, "Stand on FOCUSED subarray (highlighted) and press G to split");
+                stats->instructionColor = YELLOW;
+            } else {
+                strcpy(stats->instructionText, "Focused subarray is single element - focus will move automatically");
+                stats->instructionColor = UI_TEXT_PRIMARY;
+            }
+        } else {
+            strcpy(stats->instructionText, "Recursion complete - transitioning to merge phase");
+            stats->instructionColor = YELLOW;
+        }
+    } else if (data->currentPhase == PHASE_MERGING) {
+        if (data->hasNumber) {
+            sprintf(stats->instructionText, "Carrying: %d - Press F to drop in correct position", data->playerCarrying);
+            stats->instructionColor = YELLOW;
+        } else {
+            strcpy(stats->instructionText, "Press F to pick up numbers for merging");
+            stats->instructionColor = UI_TEXT_PRIMARY;
+        }
+    } else {
+        stats->hasInstruction = false;
+    }
+    
+    strcpy(stats->goalText, "Goal: Sort using divide-and-conquer merge sort algorithm");
+}
+
 void MergeSortRender(GameData* game) {
     MergeSortData* data = (MergeSortData*)game->algorithmData;
     if (!data) return;
@@ -691,60 +752,7 @@ void MergeSortRender(GameData* game) {
             break;
     }
     
-    DrawText(phaseText, 20, 120, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-    
-    // Draw statistics
-    char statsText[128];
-    sprintf(statsText, "Splits: %d | Merges: %d | Max Level: %d | Recursion: %s", 
-            data->splitCount, data->mergeCount, data->maxLevel, 
-            data->recursionComplete ? "Complete" : "In Progress");
-    DrawText(statsText, 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-    
-    // Draw enhanced focus information
-    char focusText[128];
-    if (data->currentFocusIndex == -1) {
-        if (data->subarrayCount == 0) {
-            sprintf(focusText, "Focus: Original Array (ready to split) | Stack: %d", data->focusStackSize);
-        } else {
-            sprintf(focusText, "Focus: None (recursion complete) | Stack: %d", data->focusStackSize);
-        }
-    } else if (data->currentFocusIndex < data->subarrayCount) {
-        Subarray* focused = &data->subarrays[data->currentFocusIndex];
-        const char* childType = focused->isLeftChild ? "Left" : "Right";
-        const char* canSplitText = focused->canSplit ? "can split" : "single element";
-        sprintf(focusText, "Focus: %s Child L%d (size=%d, %s) | Stack: %d", 
-                childType, focused->level, focused->size, canSplitText, data->focusStackSize);
-    } else {
-        sprintf(focusText, "Focus: Invalid Index %d | Stack: %d", data->currentFocusIndex, data->focusStackSize);
-    }
-    DrawText(focusText, 20, 180, FONT_SIZE_SMALL, MERGE_DIVIDE);
-    
-    // Draw instruction based on current focus state
-    char instructionText[128];
-    if (data->currentPhase == PHASE_SPLITTING) {
-        if (data->currentFocusIndex == -1 && data->subarrayCount == 0) {
-            sprintf(instructionText, "Stand on original array and press G to begin depth-first splitting");
-        } else if (data->currentFocusIndex >= 0 && data->currentFocusIndex < data->subarrayCount) {
-            Subarray* focused = &data->subarrays[data->currentFocusIndex];
-            if (focused->canSplit) {
-                sprintf(instructionText, "Stand on FOCUSED subarray (highlighted) and press G to split");
-            } else {
-                sprintf(instructionText, "Focused subarray is single element - focus will move automatically");
-            }
-        } else {
-            sprintf(instructionText, "Recursion complete - transitioning to merge phase");
-        }
-        DrawText(instructionText, 20, 200, FONT_SIZE_SMALL, YELLOW);
-    }
-    
-    // Draw player carrying indicator
-    if (data->hasNumber) {
-        char carryText[32];
-        sprintf(carryText, "Carrying: %d (Press F to drop)", data->playerCarrying);
-        DrawText(carryText, 20, 160, FONT_SIZE_SMALL, YELLOW);
-    } else {
-        DrawText("Press F to pick up numbers", 20, 160, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-    }
+    // Text rendering moved to MergeSortGetStats function
 }
 
 void MergeSortCleanup(GameData* game) {

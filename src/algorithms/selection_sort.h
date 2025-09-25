@@ -20,6 +20,7 @@ typedef struct {
 void SelectionSortInit(GameData* game);
 void SelectionSortUpdate(GameData* game);
 void SelectionSortRender(GameData* game);
+void SelectionSortGetStats(GameData* game, AlgorithmStats* stats);
 void SelectionSortCleanup(GameData* game);
 bool SelectionSortIsComplete(GameData* game);
 void SelectionSortResetLevel(GameData* game, int level);

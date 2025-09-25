@@ -7,6 +7,7 @@
 void MergeSortInit(GameData *game);
 void MergeSortUpdate(GameData *game);
 void MergeSortRender(GameData *game);
+void MergeSortGetStats(GameData *game, AlgorithmStats *stats);
 void MergeSortCleanup(GameData *game);
 bool MergeSortIsComplete(GameData *game);
 void MergeSortResetLevel(GameData *game, int level);

@@ -24,6 +24,7 @@
 #include "../core/player.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // Helper functions
 static void PushStack(QuickSortData *data, int low, int high);
@@ -313,52 +314,66 @@ void QuickSortUpdate(GameData *game)
     }
 }
 
+void QuickSortGetStats(GameData* game, AlgorithmStats* stats) {
+    QuickSortData* data = (QuickSortData*)game->algorithmData;
+    if (!data) return;
+    
+    // Primary stat: Partitions, comparisons, swaps
+    sprintf(stats->primaryStat, "Partitions: %d | Comparisons: %d | Swaps: %d",
+            data->partitionsCompleted, data->comparisons, data->swaps);
+    
+    // Secondary stat: Current partition info
+    sprintf(stats->secondaryStat, "Partition [%d...%d] | i=%d, j=%d | Pivot=%d (value=%d)",
+            data->low, data->high, data->i, data->j, data->pivotIndex, game->array[data->pivotIndex]);
+    
+    // Instructions based on current state
+    stats->hasInstruction = true;
+    if (data->comparing)
+    {
+        if (data->needsSwap)
+        {
+            if (game->carrying)
+            {
+                strcpy(stats->instructionText, "SWAPPING: Press F to place/swap numbers");
+                stats->instructionColor = GAME_COMPARING;
+            }
+            else
+            {
+                sprintf(stats->instructionText, "SWAPPING NEEDED: arr[j]=%d < pivot=%d - Press F to pick up",
+                        data->originalJValue, data->originalPivotValue);
+                stats->instructionColor = GAME_COMPARING;
+            }
+        }
+        else
+        {
+            strcpy(stats->instructionText, "Press G to SKIP - arr[j] >= pivot, no swap needed");
+            stats->instructionColor = GAME_SORTED;
+        }
+    }
+    else if (data->pivotSwapping)
+    {
+        strcpy(stats->instructionText, "🎯 PIVOT SWAPPING: Press F to swap pivot to final position!");
+        stats->instructionColor = YELLOW;
+    }
+    else
+    {
+        strcpy(stats->instructionText, "Processing next comparison...");
+        stats->instructionColor = UI_TEXT_PRIMARY;
+    }
+    
+    strcpy(stats->goalText, "Goal: Partition using Lomuto algorithm (i,j pointers)");
+}
+
 void QuickSortRender(GameData *game)
 {
     QuickSortData *data = (QuickSortData *)game->algorithmData;
     if (!data)
         return;
 
-    // Draw algorithm-specific UI
-    char statsText[128];
-    sprintf(statsText, "Partitions: %d | Comparisons: %d | Swaps: %d",
-            data->partitionsCompleted, data->comparisons, data->swaps);
-    DrawText(statsText, 20, 120, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-
-    // Show current partition info with i and j pointers
-    char partitionText[128];
-    sprintf(partitionText, "Partition [%d...%d] | i=%d, j=%d | Pivot=%d (value=%d)",
-            data->low, data->high, data->i, data->j, data->pivotIndex, game->array[data->pivotIndex]);
-    DrawText(partitionText, 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-
+    // Only render visual highlights and game objects, no text UI
+    
     if (data->comparing)
     {
-        char compText[128];
-        sprintf(compText, "Comparing: arr[j=%d]=%d vs pivot=%d",
-                data->j, data->originalJValue, data->originalPivotValue);
-        DrawText(compText, 20, 160, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-
-        if (data->needsSwap)
-        {
-            if (game->carrying)
-            {
-                DrawText("SWAPPING: Press F to place/swap numbers", 20, 180, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-                DrawText("Swap arr[i+1] with arr[j] - smaller element goes left", 20, 200, FONT_SIZE_SMALL, GAME_COMPARING);
-            }
-            else
-            {
-                DrawText("SWAPPING NEEDED: Press F to pick up a number", 20, 180, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-                sprintf(compText, "arr[j]=%d < pivot=%d - swap arr[%d] with arr[%d]!",
-                        data->originalJValue, data->originalPivotValue, data->i + 1, data->j);
-                DrawText(compText, 20, 200, FONT_SIZE_SMALL, GAME_COMPARING);
-            }
-        }
-        else
-        {
-            DrawText("Press G to SKIP - arr[j] >= pivot", 20, 180, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-            DrawText("No swap needed, j will advance", 20, 200, FONT_SIZE_SMALL, GAME_SORTED);
-        }
-
         // Highlight positions in traditional Lomuto algorithm
         if (data->j < game->arraySize)
         {
@@ -376,39 +391,12 @@ void QuickSortRender(GameData *game)
     }
     else if (data->pivotSwapping)
     {
-        DrawText("🎯 PIVOT SWAPPING PHASE!", 20, 160, FONT_SIZE_SMALL, YELLOW);
         int finalPivotPos = data->i + 1;
-        char pivotSwapText[128];
-        sprintf(pivotSwapText, "Swap pivot from position %d to position %d",
-                data->pivotIndex, finalPivotPos);
-        DrawText(pivotSwapText, 20, 180, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-        DrawText("Press F to swap the pivot to its final position!", 20, 200, FONT_SIZE_SMALL, GAME_COMPARING);
-
         // Highlight the two positions that need to be swapped
         Color brightCyan = {0, 255, 255, 255};                                     // Bright cyan for final position
         Color brightMagenta = {255, 0, 255, 255};                                  // Bright magenta for current pivot
         DrawRectangleLinesEx(game->platforms[finalPivotPos], 4, brightCyan);       // Final position
         DrawRectangleLinesEx(game->platforms[data->pivotIndex], 4, brightMagenta); // Current pivot
-    }
-    else
-    {
-        DrawText("Processing next comparison...", 20, 160, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-    }
-
-    DrawText("Goal: Partition using traditional Lomuto (i,j pointers)", 20, 220, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-    DrawText("Blue=j(current), Green=i+1(swap target), Yellow=pivot", 20, 240, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-    DrawText("F = swap arr[i+1] with arr[j], G = skip (no swap needed)", 20, 260, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
-
-    // Draw partition labels
-    if (data->i >= 0)
-    {
-        DrawText("≤ pivot", 20, 280, FONT_SIZE_SMALL, DARKGREEN);
-    }
-    if (data->i + 1 < data->pivotIndex)
-    {
-        char rightPartLabel[32];
-        sprintf(rightPartLabel, "> pivot (unsorted)");
-        DrawText(rightPartLabel, 20, 300, FONT_SIZE_SMALL, DARKBLUE);
     }
 
     // Fill pivot box with light red
@@ -420,9 +408,6 @@ void QuickSortRender(GameData *game)
     {
         DrawRectangleLinesEx(game->platforms[idx], 2, DARKGREEN);
     }
-
-    // Draw partition separators and labels - REMOVED FOR CLEANER UI
-    // Separator lines and indicators removed to improve visual clarity
 
     // Highlight current player platform if they can interact
     int playerPlatform = GetPlayerPlatform(game);
