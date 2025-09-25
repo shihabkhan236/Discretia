@@ -257,11 +257,19 @@ void InitGame(void)
     game.selectedButton = 0;
     game.buttonPressed = false;
 
+    // Initialize timer
+    game.levelTimeLimit = 0.0f;
+    game.currentTime = 0.0f;
+    game.timerActive = false;
+
     printf("Game initialized successfully\n");
 }
 
 void UpdateGame(void)
 {
+    // Update timer (runs during gameplay)
+    UpdateTimer();
+    
     // running all the time
     switch (game.currentState)
     {
@@ -504,10 +512,9 @@ void RenderGame(void)
         for (int i = 0; i < MAX_LEVELS; i++)
         {
             Rectangle btn = {levelStartX + i * 70, levelY, 70, 70};
-            Color btnColor = (game.selectedButton == i) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
+            Color btnColor = (game.selectedButton == i) ? BLACK : LIGHTGRAY;
 
-            DrawRectangleRec(btn, btnColor);
-            DrawRectangleLinesEx(btn, 2, UI_BORDER);
+            DrawRectangleLinesEx(btn, 2, btnColor);
 
             if (i == 0)
             {
@@ -543,6 +550,9 @@ void RenderGame(void)
                 DrawRectangle(SCREEN_WIDTH - 100 + i * heartSpacing, 20, heartSize, heartSize, RED);
             }
         }
+
+        // Draw timer at top center
+        RenderTimer();
 
         // Start camera mode for world objects
         BeginMode2D(game.camera);
@@ -625,19 +635,19 @@ void RenderGame(void)
             // Render stats in fixed screen coordinates
             if (strlen(stats.primaryStat) > 0)
             {
-                DrawText(stats.primaryStat, 20, 120, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
+                DrawText(stats.primaryStat, 20, 120 - 20, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
             }
             if (strlen(stats.secondaryStat) > 0)
             {
-                DrawText(stats.secondaryStat, 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
+                DrawText(stats.secondaryStat, 20, 140 - 20, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
             }
             if (stats.hasInstruction && strlen(stats.instructionText) > 0)
             {
-                DrawText(stats.instructionText, 20, 160, FONT_SIZE_SMALL, stats.instructionColor);
+                DrawText(stats.instructionText, 20, 160 - 20, FONT_SIZE_SMALL, stats.instructionColor);
             }
             if (strlen(stats.goalText) > 0)
             {
-                DrawText(stats.goalText, 20, 200, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
+                DrawText(stats.goalText, 20, 200 - 20, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
             }
         }
 
@@ -650,6 +660,14 @@ void RenderGame(void)
 
     case STATE_GAME_OVER:
         DrawCenteredText("Game Over", SCREEN_WIDTH / 2, 200, FONT_SIZE_TITLE, GAME_HEART);
+        
+        // Show reason for game over
+        if (game.currentTime >= game.levelTimeLimit) {
+            DrawCenteredText("Time's Up!", SCREEN_WIDTH / 2, 250, FONT_SIZE_BODY, RED);
+        } else if (game.hearts <= 0) {
+            DrawCenteredText("No Hearts Left!", SCREEN_WIDTH / 2, 250, FONT_SIZE_BODY, RED);
+        }
+        
         DrawCenteredText("Press R to retry or ESC for menu", SCREEN_WIDTH / 2, 300, FONT_SIZE_BODY, UI_TEXT_PRIMARY);
         break;
 
@@ -683,6 +701,17 @@ void ChangeState(GameState newState)
     game.currentState = newState;
     game.selectedButton = 0; // Reset button selection
 
+    // Handle timer state changes
+    if (newState == STATE_GAMEPLAY) {
+        game.timerActive = true; // Resume timer when entering gameplay
+    } else if (newState == STATE_PAUSE) {
+        game.timerActive = false; // Pause timer when pausing game
+    } else if (newState == STATE_LEVEL_COMPLETE || newState == STATE_GAME_OVER) {
+        game.timerActive = false; // Stop timer when level ends
+    } else {
+        game.timerActive = false; // Stop timer for menu states
+    }
+
     printf("State changed from %d to %d\n", game.previousState, game.currentState);
 }
 
@@ -714,5 +743,76 @@ void ResetLevel(void)
     game.velocity = (Vector2){0, 0};
     game.isOnGround = true;
 
+    // Initialize timer for the level
+    InitTimer(game.selectedLevel);
+
     printf("Level %d reset\n", game.selectedLevel);
+}
+
+// Timer Functions Implementation
+
+float CalculateLevelTimeLimit(int level) {
+    if (level == 0) {
+        return 30.0f; // Level 1 (index 0): 60 seconds
+    }
+    return 30.0f + (15.0f * (level)); // Level 2+: 60 + (20 * level)
+}
+
+void InitTimer(int level) {
+    game.levelTimeLimit = CalculateLevelTimeLimit(level);
+    game.currentTime = 0.0f;
+    game.timerActive = true;
+    
+    printf("Timer initialized for level %d: %.0f seconds\n", level + 1, game.levelTimeLimit);
+}
+
+void UpdateTimer(void) {
+    if (!game.timerActive || game.currentState != STATE_GAMEPLAY) {
+        return;
+    }
+    
+    game.currentTime += GetFrameTime();
+    
+    // Check if time is up
+    if (game.currentTime >= game.levelTimeLimit) {
+        game.timerActive = false;
+        printf("Time's up! Game Over.\n");
+        ChangeState(STATE_GAME_OVER);
+    }
+}
+
+void FormatTime(float timeInSeconds, char* buffer, int bufferSize) {
+    int totalSeconds = (int)timeInSeconds;
+    int minutes = totalSeconds / 60;
+    int seconds = totalSeconds % 60;
+    snprintf(buffer, bufferSize, "%02d:%02d", minutes, seconds);
+}
+
+void RenderTimer(void) {
+    if (game.currentState != STATE_GAMEPLAY || !game.timerActive) {
+        return;
+    }
+    
+    float remainingTime = game.levelTimeLimit - game.currentTime;
+    if (remainingTime < 0) remainingTime = 0;
+    
+    char timeBuffer[16];
+    FormatTime(remainingTime, timeBuffer, sizeof(timeBuffer));
+    
+    // Calculate position for center of screen
+    int textWidth = MeasureText(timeBuffer, FONT_SIZE_TITLE);
+    int x = (SCREEN_WIDTH - textWidth) / 2;
+    int y = 20; // Top of screen with some padding
+    
+    // Choose color based on remaining time
+    Color timerColor = UI_TEXT_PRIMARY;
+    if (remainingTime <= 10.0f) {
+        timerColor = RED; // Red when less than 10 seconds
+    } else if (remainingTime <= 30.0f) {
+        timerColor = ORANGE; // Orange when less than 30 seconds
+    }
+    
+    // Draw timer with background for better visibility
+    // DrawRectangle(x - 10, y - 5, textWidth + 20, FONT_SIZE_TITLE + 10, (Color){0, 0, 0, 128});
+    DrawText(timeBuffer, x, y, FONT_SIZE_TITLE, timerColor);
 }

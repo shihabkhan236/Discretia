@@ -103,6 +103,11 @@ struct GameData
     int selectedButton;
     bool buttonPressed;
 
+    // Timer system
+    float levelTimeLimit;    // Time limit for current level in seconds
+    float currentTime;       // Current elapsed time in seconds
+    bool timerActive;        // Whether timer is running
+
     // Add camera
     Camera2D camera;
     int cameraMode; // For switching between camera types
@@ -123,6 +128,13 @@ void CleanupGame(void);
 // State management
 void ChangeState(GameState newState);
 void ResetLevel(void);
+
+// Timer functions
+void InitTimer(int level);
+void UpdateTimer(void);
+void RenderTimer(void);
+float CalculateLevelTimeLimit(int level);
+void FormatTime(float timeInSeconds, char* buffer, int bufferSize);
 
 // Layout functions
 void CalculateBoxPositions(Rectangle *platforms, int arraySize);

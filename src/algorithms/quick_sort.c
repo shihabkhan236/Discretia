@@ -550,7 +550,7 @@ void QuickSortRender(GameData *game)
 
         if (canInteract)
         {
-            DrawRectangleLinesEx(game->platforms[playerPlatform], 2, WHITE);
+            DrawRectangleLinesEx(game->platforms[playerPlatform], 2, BLACK);
         }
     }
 }
