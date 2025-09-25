@@ -48,8 +48,24 @@ typedef struct {
     int highlightedElement;   // Which element is highlighted (-1 = none)
     int highlightedSubarray;  // Which subarray contains highlighted element
     
+    // Comparison highlighting (show both elements being compared)
+    int leftCompareElement;   // Left element being compared (-1 = none)
+    int rightCompareElement;  // Right element being compared (-1 = none)
+    
     // Track which elements are being worked on
     bool* originalActive;  // Which elements in original array are still active
+    
+    // Player carrying system
+    int playerCarrying;    // Number player is carrying (0 = nothing)
+    bool hasNumber;        // Whether player is carrying a number
+    
+    // Focus system for sequential recursion
+    int currentFocusIndex; // Index of currently focused subarray (-1 = original array)
+    int* focusStack;       // Stack of focus indices for recursion tracking
+    int focusStackSize;    // Current stack size
+    int focusStackCapacity; // Allocated capacity for focus stack
+    
+
     
     // Statistics
     int splitCount;
@@ -71,6 +87,17 @@ static void UpdateMergeHighlights(MergeSortData* data);
 static bool ProcessMergeChoice(GameData* game, MergeSortData* data, int subarrayIndex, int elementIndex);
 static void FindMergeablePairs(MergeSortData* data);
 static bool CanMerge(MergeSortData* data, int leftIndex, int rightIndex);
+static void InitializeFocusSystem(MergeSortData* data);
+static void UpdateFocus(MergeSortData* data);
+static void UpdateSubarrayFocusStates(MergeSortData* data);
+static void HandleMergeCompletion(MergeSortData* data, GameData* game);
+static int FindNextFocusAfterMerge(MergeSortData* data, int mergedParentIndex);
+static void PrintMergeSortState(MergeSortData* data);
+static void MoveFocusAfterSplit(MergeSortData* data, int leftChildIndex, int rightChildIndex);
+static bool IsFocused(MergeSortData* data, int subarrayIndex);
+static int FindSibling(MergeSortData* data, int subarrayIndex);
+static void PushFocusStack(MergeSortData* data, int focusIndex);
+static int PopFocusStack(MergeSortData* data);
 
 void MergeSortInit(GameData* game) {
     // Ensure any previous algorithm data is cleaned up
@@ -111,6 +138,17 @@ void MergeSortInit(GameData* game) {
     data->highlightingEnabled = false;
     data->highlightedElement = -1;
     data->highlightedSubarray = -1;
+    data->leftCompareElement = -1;
+    data->rightCompareElement = -1;
+    
+    // Initialize player carrying system
+    data->playerCarrying = 0;
+    data->hasNumber = false;
+    
+    // Initialize focus system
+    InitializeFocusSystem(data);
+    
+
     
     // Track which original elements are active
     data->originalActive = (bool*)malloc(MAX_ARRAY_SIZE * sizeof(bool));
@@ -169,6 +207,19 @@ int MergeSortGetPlayerPlatform(GameData* game) {
     return -1;
 }
 
+// Get carried number for player display
+int MergeSortGetCarriedNumber(GameData* game) {
+    MergeSortData* data = (MergeSortData*)game->algorithmData;
+    if (!data) return 0;
+    return data->playerCarrying;
+}
+
+bool MergeSortIsCarryingNumber(GameData* game) {
+    MergeSortData* data = (MergeSortData*)game->algorithmData;
+    if (!data) return false;
+    return data->hasNumber;
+}
+
 void MergeSortUpdate(GameData* game) {
     MergeSortData* data = (MergeSortData*)game->algorithmData;
     if (!data) return;
@@ -178,51 +229,95 @@ void MergeSortUpdate(GameData* game) {
     
     // Handle input based on current phase
     if (data->currentPhase == PHASE_SPLITTING) {
-        // Handle G key for splitting arrays
+        // Handle G key for splitting arrays (only focused arrays)
         if (IsKeyPressed(KEY_G)) {
-            if (playerPlatform >= 0 && data->subarrayCount == 0) {
-                // First split - create initial subarrays from original array
+            if (playerPlatform >= 0 && data->subarrayCount == 0 && data->currentFocusIndex == -1) {
+                // First split - create initial subarrays from original array (only if focused on original)
                 SplitArray(data, -1, game); // -1 means split original array
                 UpdateAllPlatforms(data, game);
                 printf("Created initial split from original array\n");
                 return;
             }
             
-            // Check if player is on any subarray for splitting
+            // Check which subarray the player is on
+            int playerSubarrayIndex = -1;
+            
+            // First, determine which subarray the player is on (if any)
             for (int i = 0; i < data->subarrayCount; i++) {
                 Subarray* sub = &data->subarrays[i];
-                if (!sub->isActive || !sub->canSplit) continue;
+                if (!sub->isActive) continue;
                 
-                // Check if player is on this subarray's platforms
                 for (int j = 0; j < sub->size; j++) {
                     Rectangle platform = sub->platforms[j];
                     if (game->player.x + game->player.width > platform.x + 8 && 
                         game->player.x < platform.x + platform.width - 8 &&
                         abs((int)(game->player.y + game->player.height - platform.y)) < GROUND_TOLERANCE) {
-                        
-                        SplitArray(data, i, game);
-                        UpdateAllPlatforms(data, game);
-                        
-                        // Check if recursion is complete (transition to merge phase)
-                        if (data->recursionComplete) {
-                            data->currentPhase = PHASE_MERGING;
-                            StartMergePhase(data);
-                            printf("Transitioning to merge phase\n");
-                        }
-                        return;
+                        playerSubarrayIndex = i;
+                        break;
                     }
                 }
+                if (playerSubarrayIndex >= 0) break;
+            }
+            
+            // Check if player is on the currently focused subarray for splitting
+            if (data->currentFocusIndex >= 0 && data->currentFocusIndex < data->subarrayCount) {
+                Subarray* focusedSub = &data->subarrays[data->currentFocusIndex];
+                
+                if (playerSubarrayIndex == data->currentFocusIndex) {
+                    // Player is on focused subarray
+                    if (!focusedSub->canSplit) {
+                        printf("Focused subarray cannot be split (single element or already split)\n");
+                        return;
+                    }
+                    
+                    SplitArray(data, data->currentFocusIndex, game);
+                    UpdateAllPlatforms(data, game);
+                    printf("Split focused subarray %d\n", data->currentFocusIndex);
+                    return;
+                } else if (playerSubarrayIndex >= 0) {
+                    // Player is on a different subarray (not focused)
+                    printf("Cannot split non-focused subarray! Current focus is on subarray %d\n", data->currentFocusIndex);
+                    return;
+                } else {
+                    // Player is not on any subarray
+                    printf("Must stand on the focused subarray (index %d) to split\n", data->currentFocusIndex);
+                    return;
+                }
+            } else {
+                printf("No subarray is currently focused for splitting\n");
             }
         }
     } else if (data->currentPhase == PHASE_MERGING) {
-        // Update merge highlights
-        UpdateMergeHighlights(data);
+        // Update merge highlights to show which element should be picked
+        if (data->highlightingEnabled) {
+            UpdateMergeHighlights(data);
+        }
         
-        // Handle F key for merging elements
+        // Handle F key for picking/dropping elements
         if (IsKeyPressed(KEY_F)) {
             // Check if player is on original array platform
             if (playerPlatform >= 0) {
-                printf("Cannot select from original array during merge phase\n");
+                // Player is on original array
+                int elementIndex = playerPlatform;
+                if (elementIndex < game->arraySize) {
+                    if (!data->hasNumber && game->array[elementIndex] != 0) {
+                        // Pick up element from original array
+                        data->playerCarrying = game->array[elementIndex];
+                        data->hasNumber = true;
+                        game->array[elementIndex] = 0; // Empty the box
+                        printf("Picked up %d from original array\n", data->playerCarrying);
+                    } else if (data->hasNumber && game->array[elementIndex] == 0) {
+                        // Drop element into empty box in original array
+                        game->array[elementIndex] = data->playerCarrying;
+                        printf("Dropped %d into original array\n", data->playerCarrying);
+                        data->playerCarrying = 0;
+                        data->hasNumber = false;
+                    } else if (data->hasNumber && game->array[elementIndex] != 0) {
+                        printf("Box is not empty - cannot drop here\n");
+                    } else {
+                        printf("No number to pick up\n");
+                    }
+                }
                 return;
             }
             
@@ -237,19 +332,194 @@ void MergeSortUpdate(GameData* game) {
                         game->player.x < platform.x + platform.width - 8 &&
                         abs((int)(game->player.y + game->player.height - platform.y)) < GROUND_TOLERANCE) {
                         
-                        // Process merge choice
-                        if (ProcessMergeChoice(game, data, i, j)) {
-                            printf("Correct merge choice!\n");
+                        if (!data->hasNumber && sub->elements[j] != 0) {
+                            // Pick up element from subarray
+                            data->playerCarrying = sub->elements[j];
+                            data->hasNumber = true;
+                            sub->elements[j] = 0; // Empty the box
+                            
+                            // Advance merge pointers
+                            if (i == data->leftMergeIndex && j == data->leftPointer) {
+                                data->leftPointer++;
+                            } else if (i == data->rightMergeIndex && j == data->rightPointer) {
+                                data->rightPointer++;
+                            }
+                            
+                            printf("Picked up %d from subarray\n", data->playerCarrying);
+                        } else if (data->hasNumber && sub->elements[j] == 0) {
+                            // Drop element into empty box in subarray
+                            sub->elements[j] = data->playerCarrying;
+                            printf("Dropped %d into subarray\n", data->playerCarrying);
+                            data->playerCarrying = 0;
+                            data->hasNumber = false;
+                        } else if (data->hasNumber && sub->elements[j] != 0) {
+                            printf("Box is not empty - cannot drop here\n");
                         } else {
-                            printf("Incorrect merge choice - lost a heart!\n");
+                            printf("No number to pick up\n");
                         }
                         return;
                     }
                 }
             }
             
-            printf("Not standing on any mergeable element\n");
+            printf("Not standing on any platform\n");
         }
+        
+        // Check if current merge is complete
+        if (data->highlightingEnabled && data->leftMergeIndex >= 0 && data->rightMergeIndex >= 0) {
+            Subarray* left = &data->subarrays[data->leftMergeIndex];
+            Subarray* right = &data->subarrays[data->rightMergeIndex];
+            
+            // Check if both subarrays are empty (all elements moved to parent)
+            bool leftEmpty = true, rightEmpty = true;
+            for (int i = 0; i < left->size; i++) {
+                if (left->elements[i] != 0) {
+                    leftEmpty = false;
+                    break;
+                }
+            }
+            for (int i = 0; i < right->size; i++) {
+                if (right->elements[i] != 0) {
+                    rightEmpty = false;
+                    break;
+                }
+            }
+            
+            if (leftEmpty && rightEmpty) {
+                // Check if parent array is filled
+                bool parentFilled = true;
+                if (left->parentIndex == -1) {
+                    // Parent is original array - check if it's filled
+                    for (int k = 0; k < game->arraySize; k++) {
+                        if (game->array[k] == 0) {
+                            parentFilled = false;
+                            break;
+                        }
+                    }
+                } else {
+                    // Parent is another subarray - check if it's filled
+                    Subarray* parent = &data->subarrays[left->parentIndex];
+                    for (int k = 0; k < parent->size; k++) {
+                        if (parent->elements[k] == 0) {
+                            parentFilled = false;
+                            break;
+                        }
+                    }
+                }
+                
+                if (parentFilled) {
+                    // Merge is complete and parent is filled
+                    // printf("Merge complete - both subarrays empty and parent filled\n");
+                    
+                    // Store parent index before cleanup for focus calculation
+                    int parentIndex = left->parentIndex;
+                    
+                    HandleMergeCompletion(data, game);
+                    
+                    // After merge completion, determine next focus based on merge sort rules
+                    if (data->currentPhase == PHASE_SPLITTING) {
+                        // The parent array is now filled, check if we need to continue splitting
+                        // or if we should merge at the parent level
+                        
+                        if (parentIndex == -1) {
+                            // Merged to original array - check if there are more level 1 subarrays to process
+                            bool hasLevel1ToProcess = false;
+                            for (int i = 0; i < data->subarrayCount; i++) {
+                                Subarray* sub = &data->subarrays[i];
+                                if (sub->isActive && sub->size > 1 && sub->level == 1) {
+                                    data->currentFocusIndex = i;
+                                    hasLevel1ToProcess = true;
+                                    printf("Next focus: Level 1 subarray %d\n", i);
+                                    break;
+                                }
+                            }
+                            
+                            if (!hasLevel1ToProcess) {
+                                // All level 1 subarrays processed, merge sort complete
+                                data->currentPhase = PHASE_COMPLETE;
+                                printf("All level 1 subarrays processed - merge sort complete!\n");
+                            }
+                        } else {
+                            // Merged to a subarray parent - check if parent's sibling needs processing
+                            Subarray* parent = &data->subarrays[parentIndex];
+                            
+                            // If parent is left child, look for right sibling to process
+                            if (parent->isLeftChild) {
+                                bool foundRightSibling = false;
+                                for (int i = 0; i < data->subarrayCount; i++) {
+                                    Subarray* sub = &data->subarrays[i];
+                                    if (sub->isActive && sub->size > 1 && 
+                                        sub->level == parent->level && 
+                                        sub->parentIndex == parent->parentIndex &&
+                                        !sub->isLeftChild) {
+                                        // Found right sibling that needs processing
+                                        data->currentFocusIndex = i;
+                                        foundRightSibling = true;
+                                        printf("Next focus: Right sibling %d at level %d\n", i, sub->level);
+                                        break;
+                                    }
+                                }
+                                
+                                if (!foundRightSibling) {
+                                    // No right sibling, parent level is complete
+                                    // Check if parent can be merged with its sibling
+                                    FindMergeablePairs(data);
+                                    if (data->highlightingEnabled) {
+                                        data->currentPhase = PHASE_MERGING;
+                                        printf("Parent level complete, starting merge at parent level\n");
+                                    } else {
+                                        // Continue up the tree
+                                        int nextFocus = FindNextFocusAfterMerge(data, parent->parentIndex);
+                                        if (nextFocus >= 0) {
+                                            data->currentFocusIndex = nextFocus;
+                                            printf("Continuing up tree, next focus: %d\n", nextFocus);
+                                        } else {
+                                            data->currentPhase = PHASE_COMPLETE;
+                                            printf("No more processing needed - complete!\n");
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Parent is right child, its subtree is complete
+                                // Check if parent can be merged with left sibling
+                                FindMergeablePairs(data);
+                                if (data->highlightingEnabled) {
+                                    data->currentPhase = PHASE_MERGING;
+                                    printf("Right subtree complete, merging at parent level\n");
+                                } else {
+                                    // Continue up the tree
+                                    int nextFocus = FindNextFocusAfterMerge(data, parent->parentIndex);
+                                    if (nextFocus >= 0) {
+                                        data->currentFocusIndex = nextFocus;
+                                        printf("Continuing up tree, next focus: %d\n", nextFocus);
+                                    } else {
+                                        data->currentPhase = PHASE_COMPLETE;
+                                        printf("No more processing needed - complete!\n");
+                                    }
+                                }
+                            }
+                        }
+                        
+                        PrintMergeSortState(data);
+                    }
+                } else {
+                    // printf("Subarrays empty but parent not filled yet\n");
+                }
+            }
+        }
+    }
+    
+
+    
+    // Update focus states for all subarrays
+    UpdateSubarrayFocusStates(data);
+    
+    // Check if we should transition to merge phase
+    if (data->currentPhase == PHASE_SPLITTING && data->recursionComplete) {
+        data->currentPhase = PHASE_MERGING;
+        data->highlightingEnabled = true; // Enable merge highlighting
+        FindMergeablePairs(data); // Find first mergeable pair
+        printf("Transitioning to merge phase - recursion complete\n");
     }
     
     // Integrate with existing camera system
@@ -287,14 +557,52 @@ void MergeSortRender(GameData* game) {
         for (int j = 0; j < sub->size; j++) {
             Rectangle platform = sub->platforms[j];
             
-            // Check if this element should be highlighted
-            bool isHighlighted = (data->highlightingEnabled && 
-                                i == data->highlightedSubarray && 
-                                j == data->highlightedElement);
+            // Check if player is standing on this platform
+            bool playerOnPlatform = (game->player.x + game->player.width > platform.x + 8 && 
+                                   game->player.x < platform.x + platform.width - 8 &&
+                                   abs((int)(game->player.y + game->player.height - platform.y)) < GROUND_TOLERANCE);
             
-            // Use highlighting color if this element is highlighted
-            Color platformColor = isHighlighted ? YELLOW : UI_BUTTON_NORMAL;
-            Color borderColor = isHighlighted ? ORANGE : LIGHTGRAY;
+            // Check different highlight states
+            bool isCorrectChoice = (data->highlightingEnabled && 
+                                  i == data->highlightedSubarray && 
+                                  j == data->highlightedElement);
+            
+            bool isLeftCompare = (data->highlightingEnabled && 
+                                i == data->leftMergeIndex && 
+                                j == data->leftCompareElement);
+            
+            bool isRightCompare = (data->highlightingEnabled && 
+                                 i == data->rightMergeIndex && 
+                                 j == data->rightCompareElement);
+            
+            // Check if this subarray is currently focused
+            bool isFocused = IsFocused(data, i);
+            
+            // Visual feedback with different colors for comparison
+            Color platformColor;
+            Color borderColor;
+            
+            if (isCorrectChoice) {
+                // Correct choice - bright yellow
+                platformColor = YELLOW;
+                borderColor = ORANGE;
+            } else if (isLeftCompare || isRightCompare) {
+                // Elements being compared - light blue outline
+                platformColor = UI_BUTTON_NORMAL;
+                borderColor = SKYBLUE;
+            } else {
+                // Normal platform color
+                platformColor = UI_BUTTON_NORMAL;
+                if (isFocused) {
+                    // Simple blue outline for focused subarray
+                    borderColor = BLUE;
+                } else if (playerOnPlatform) {
+                    // Light green outline when player is standing on platform
+                    borderColor = LIME;
+                } else {
+                    borderColor = LIGHTGRAY;
+                }
+            }
             
             DrawRectangleRec(platform, platformColor);
             DrawRectangleLinesEx(platform, 2, borderColor);
@@ -303,15 +611,15 @@ void MergeSortRender(GameData* game) {
             if (sub->elements[j] != 0) {
                 char numText[8];
                 sprintf(numText, "%d", sub->elements[j]);
-                Color textColor = isHighlighted ? BLACK : UI_TEXT_PRIMARY;
+                Color textColor = isCorrectChoice ? BLACK : UI_TEXT_PRIMARY;
                 DrawCenteredText(numText, 
                                platform.x + platform.width/2, 
                                platform.y + platform.height/2, 
                                FONT_SIZE_BUTTON * 1.5, textColor);
             } else {
                 // Draw empty box indicator
-                Color emptyColor = isHighlighted ? DARKGRAY : GRAY;
-                DrawText("□", 
+                Color emptyColor = isCorrectChoice ? DARKGRAY : GRAY;
+                DrawText(" ", 
                         platform.x + platform.width/2 - 8, 
                         platform.y + platform.height/2 - 8, 
                         FONT_SIZE_BUTTON, emptyColor);
@@ -322,6 +630,8 @@ void MergeSortRender(GameData* game) {
         char levelText[16];
         sprintf(levelText, "L%d", sub->level);
         DrawText(levelText, sub->position.x - 30, sub->position.y + 20, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
+        
+
     }
     
     // Draw phase information and statistics
@@ -336,9 +646,9 @@ void MergeSortRender(GameData* game) {
             break;
         case PHASE_MERGING:
             if (data->highlightingEnabled) {
-                phaseText = "MERGING PHASE - Press F on highlighted element (choose smaller value)";
+                phaseText = "MERGING PHASE - Compare outlined elements, pick YELLOW (smaller) one first";
             } else {
-                phaseText = "MERGING PHASE - All merges complete!";
+                phaseText = "MERGING PHASE - Use F to pick up and drop numbers to merge subarrays";
             }
             break;
         case PHASE_COMPLETE:
@@ -346,14 +656,60 @@ void MergeSortRender(GameData* game) {
             break;
     }
     
-    // DrawText(phaseText, 20, 120, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
+    DrawText(phaseText, 20, 120, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
     
-    // // Draw statistics
-    // char statsText[128];
-    // sprintf(statsText, "Splits: %d | Merges: %d | Max Level: %d | Recursion: %s", 
-    //         data->splitCount, data->mergeCount, data->maxLevel, 
-    //         data->recursionComplete ? "Complete" : "In Progress");
-    // DrawText(statsText, 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
+    // Draw statistics
+    char statsText[128];
+    sprintf(statsText, "Splits: %d | Merges: %d | Max Level: %d | Recursion: %s", 
+            data->splitCount, data->mergeCount, data->maxLevel, 
+            data->recursionComplete ? "Complete" : "In Progress");
+    DrawText(statsText, 20, 140, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
+    
+    // Draw enhanced focus information
+    char focusText[128];
+    if (data->currentFocusIndex == -1) {
+        if (data->subarrayCount == 0) {
+            sprintf(focusText, "Focus: Original Array (ready to split) | Stack: %d", data->focusStackSize);
+        } else {
+            sprintf(focusText, "Focus: None (recursion complete) | Stack: %d", data->focusStackSize);
+        }
+    } else if (data->currentFocusIndex < data->subarrayCount) {
+        Subarray* focused = &data->subarrays[data->currentFocusIndex];
+        const char* childType = focused->isLeftChild ? "Left" : "Right";
+        const char* canSplitText = focused->canSplit ? "can split" : "single element";
+        sprintf(focusText, "Focus: %s Child L%d (size=%d, %s) | Stack: %d", 
+                childType, focused->level, focused->size, canSplitText, data->focusStackSize);
+    } else {
+        sprintf(focusText, "Focus: Invalid Index %d | Stack: %d", data->currentFocusIndex, data->focusStackSize);
+    }
+    DrawText(focusText, 20, 180, FONT_SIZE_SMALL, MERGE_DIVIDE);
+    
+    // Draw instruction based on current focus state
+    char instructionText[128];
+    if (data->currentPhase == PHASE_SPLITTING) {
+        if (data->currentFocusIndex == -1 && data->subarrayCount == 0) {
+            sprintf(instructionText, "Stand on original array and press G to begin depth-first splitting");
+        } else if (data->currentFocusIndex >= 0 && data->currentFocusIndex < data->subarrayCount) {
+            Subarray* focused = &data->subarrays[data->currentFocusIndex];
+            if (focused->canSplit) {
+                sprintf(instructionText, "Stand on FOCUSED subarray (highlighted) and press G to split");
+            } else {
+                sprintf(instructionText, "Focused subarray is single element - focus will move automatically");
+            }
+        } else {
+            sprintf(instructionText, "Recursion complete - transitioning to merge phase");
+        }
+        DrawText(instructionText, 20, 200, FONT_SIZE_SMALL, YELLOW);
+    }
+    
+    // Draw player carrying indicator
+    if (data->hasNumber) {
+        char carryText[32];
+        sprintf(carryText, "Carrying: %d (Press F to drop)", data->playerCarrying);
+        DrawText(carryText, 20, 160, FONT_SIZE_SMALL, YELLOW);
+    } else {
+        DrawText("Press F to pick up numbers", 20, 160, FONT_SIZE_SMALL, UI_TEXT_PRIMARY);
+    }
 }
 
 void MergeSortCleanup(GameData* game) {
@@ -381,6 +737,12 @@ void MergeSortCleanup(GameData* game) {
     if (data->originalActive) {
         free(data->originalActive);
         data->originalActive = NULL;
+    }
+    
+    // Clean up focus system
+    if (data->focusStack) {
+        free(data->focusStack);
+        data->focusStack = NULL;
     }
     
     // Reset camera to default behavior for other algorithms
@@ -455,6 +817,14 @@ void MergeSortResetLevel(GameData* game, int level) {
     data->highlightingEnabled = false;
     data->highlightedElement = -1;
     data->highlightedSubarray = -1;
+    
+    // Reset player carrying system
+    data->playerCarrying = 0;
+    data->hasNumber = false;
+    
+    // Reset focus system
+    data->currentFocusIndex = -1; // Start focused on original array
+    data->focusStackSize = 0;
     
     // Set up base array based on level - use the original game array
     switch (level) {
@@ -614,7 +984,11 @@ static void SplitArray(MergeSortData* data, int subarrayIndex, GameData* game) {
         
         data->maxLevel = newLevel;
         data->splitCount++;
-        printf("Initial split of original array into 2 subarrays\n");
+        
+        // Move focus to left child first (depth-first left traversal)
+        MoveFocusAfterSplit(data, 0, 1); // Left child index 0, right child index 1
+        
+        printf("Initial split of original array into 2 subarrays, focus moved to left child\n");
         return;
     }
     
@@ -663,6 +1037,10 @@ static void SplitArray(MergeSortData* data, int subarrayIndex, GameData* game) {
     parent->canSplit = false;
     // Keep parent visible to show the empty slots
     
+    // Store indices of new children before adding them
+    int leftChildIndex = data->subarrayCount;
+    int rightChildIndex = data->subarrayCount + 1;
+    
     // Add new subarrays
     AddSubarray(data, left);
     AddSubarray(data, right);
@@ -673,21 +1051,28 @@ static void SplitArray(MergeSortData* data, int subarrayIndex, GameData* game) {
     }
     
     data->splitCount++;
-    printf("Split subarray at level %d, now have %d active subarrays\n", newLevel, data->subarrayCount);
     
-    // Check if recursion is complete (all subarrays are single elements)
-    bool allSingleElements = true;
-    for (int i = 0; i < data->subarrayCount; i++) {
-        if (data->subarrays[i].isActive && data->subarrays[i].size > 1) {
-            allSingleElements = false;
-            break;
+    // Move focus to left child first (depth-first left traversal)
+    MoveFocusAfterSplit(data, leftChildIndex, rightChildIndex);
+    
+    printf("Split subarray at level %d, now have %d active subarrays, focus moved to left child\n", 
+           newLevel, data->subarrayCount);
+    
+    // After splitting, check if the left child is now a single element
+    // If so, we need to move focus to the right child
+    if (leftChildIndex < data->subarrayCount && data->subarrays[leftChildIndex].size == 1) {
+        // Left child is single element, move focus to right child if it can be split
+        if (rightChildIndex < data->subarrayCount && data->subarrays[rightChildIndex].size > 1) {
+            data->currentFocusIndex = rightChildIndex;
+            printf("Left child is single element, focus moved to right child (index %d)\n", rightChildIndex);
+        } else {
+            // Both children are single elements, move focus back up
+            UpdateFocus(data);
         }
     }
     
-    if (allSingleElements) {
-        data->recursionComplete = true;
-        printf("Recursion complete - all subarrays are single elements\n");
-    }
+    // Update focus system to check if recursion is complete
+    UpdateFocus(data);
 }
 
 
@@ -737,14 +1122,20 @@ static void UpdateMergeHighlights(MergeSortData* data) {
     // Reset highlights
     data->highlightedElement = -1;
     data->highlightedSubarray = -1;
+    data->leftCompareElement = -1;
+    data->rightCompareElement = -1;
     
-    // Highlight the next elements to be compared
+    // Show both elements being compared
     if (data->leftMergeIndex >= 0 && data->rightMergeIndex >= 0) {
         Subarray* left = &data->subarrays[data->leftMergeIndex];
         Subarray* right = &data->subarrays[data->rightMergeIndex];
         
-        // Determine which element should be highlighted (smaller one)
         if (data->leftPointer < left->size && data->rightPointer < right->size) {
+            // Both have elements - show both for comparison
+            data->leftCompareElement = data->leftPointer;
+            data->rightCompareElement = data->rightPointer;
+            
+            // Highlight the smaller one (correct choice) in yellow
             int leftVal = left->elements[data->leftPointer];
             int rightVal = right->elements[data->rightPointer];
             
@@ -912,4 +1303,338 @@ static void FindMergeablePairs(MergeSortData* data) {
     // No mergeable pairs found
     data->highlightingEnabled = false;
     printf("No mergeable pairs found\n");
+}
+
+static void InitializeFocusSystem(MergeSortData* data) {
+    data->currentFocusIndex = -1; // Start focused on original array
+    data->focusStackCapacity = 16; // Initial capacity
+    data->focusStack = (int*)malloc(data->focusStackCapacity * sizeof(int));
+    data->focusStackSize = 0;
+    
+    if (!data->focusStack) {
+        printf("Error: Failed to allocate focus stack\n");
+        data->focusStackCapacity = 0;
+    }
+}
+
+static void PushFocusStack(MergeSortData* data, int focusIndex) {
+    if (data->focusStackSize >= data->focusStackCapacity) {
+        // Resize stack if needed
+        data->focusStackCapacity *= 2;
+        data->focusStack = (int*)realloc(data->focusStack, data->focusStackCapacity * sizeof(int));
+    }
+    
+    data->focusStack[data->focusStackSize] = focusIndex;
+    data->focusStackSize++;
+    printf("Pushed focus %d onto stack (size: %d)\n", focusIndex, data->focusStackSize);
+}
+
+static int PopFocusStack(MergeSortData* data) {
+    if (data->focusStackSize <= 0) {
+        return -1; // Stack empty
+    }
+    
+    data->focusStackSize--;
+    int focusIndex = data->focusStack[data->focusStackSize];
+    printf("Popped focus %d from stack (size: %d)\n", focusIndex, data->focusStackSize);
+    return focusIndex;
+}
+
+static void MoveFocusAfterSplit(MergeSortData* data, int leftChildIndex, int rightChildIndex) {
+    // Push current focus onto stack for later return
+    if (data->currentFocusIndex != -1) {
+        PushFocusStack(data, data->currentFocusIndex);
+    }
+    
+
+    
+    // Always focus on left child first (depth-first left traversal)
+    data->currentFocusIndex = leftChildIndex;
+    printf("Focus moved to left child (index %d), right child is %d\n", leftChildIndex, rightChildIndex);
+    
+    // Update focus states for all subarrays
+    UpdateSubarrayFocusStates(data);
+}
+
+static bool IsFocused(MergeSortData* data, int subarrayIndex) {
+    return data->currentFocusIndex == subarrayIndex;
+}
+
+static int FindSibling(MergeSortData* data, int subarrayIndex) {
+    if (subarrayIndex < 0 || subarrayIndex >= data->subarrayCount) {
+        return -1;
+    }
+    
+    Subarray* target = &data->subarrays[subarrayIndex];
+    
+    // Find sibling with same parent
+    for (int i = 0; i < data->subarrayCount; i++) {
+        if (i == subarrayIndex) continue;
+        
+        Subarray* candidate = &data->subarrays[i];
+        if (candidate->parentIndex == target->parentIndex && 
+            candidate->level == target->level &&
+            candidate->isLeftChild != target->isLeftChild) {
+            return i;
+        }
+    }
+    
+    return -1; // No sibling found
+}
+
+static void UpdateFocus(MergeSortData* data) {
+    if (data->currentFocusIndex == -1) {
+        // Focused on original array, nothing to update during splitting phase
+        return;
+    }
+    
+    if (data->currentFocusIndex >= data->subarrayCount) {
+        // Invalid focus index, reset to original array
+        data->currentFocusIndex = -1;
+        return;
+    }
+    
+    Subarray* focused = &data->subarrays[data->currentFocusIndex];
+    
+    // If current focused subarray is single element, move focus according to depth-first rules
+    if (focused->size == 1) {
+        printf("Current focus (index %d) is single element, determining next focus...\n", data->currentFocusIndex);
+        
+        // Find sibling of current focused subarray
+        int siblingIndex = FindSibling(data, data->currentFocusIndex);
+        
+        if (focused->isLeftChild) {
+            // We're on left child, move to right sibling if it exists and can be split
+            if (siblingIndex >= 0) {
+                Subarray* sibling = &data->subarrays[siblingIndex];
+                if (sibling->size > 1) {
+                    // Right sibling can still be split, focus on it
+                    data->currentFocusIndex = siblingIndex;
+                    printf("Left child is single element, focus moved to right child (index %d)\n", siblingIndex);
+                    UpdateSubarrayFocusStates(data);
+                    return;
+                } else {
+                    // Right sibling is also single element, both children complete
+                    // Start merge phase for these two single elements
+                    printf("Both children are single elements, starting merge phase\n");
+                    
+                    // Set up merge state for these two single elements
+                    data->leftMergeIndex = data->currentFocusIndex;  // Left child (current focus)
+                    data->rightMergeIndex = siblingIndex;            // Right sibling
+                    data->leftPointer = 0;
+                    data->rightPointer = 0;
+                    data->highlightingEnabled = true;
+                    
+                    // Switch to merge phase for this pair
+                    data->currentPhase = PHASE_MERGING;
+                    data->currentFocusIndex = -1; // No focus during merging
+                    
+                    printf("Started merging subarrays %d and %d\n", data->leftMergeIndex, data->rightMergeIndex);
+                    return;
+                }
+            } else {
+                // No right sibling found, this shouldn't happen in proper merge sort
+                printf("Warning: Left child has no right sibling\n");
+            }
+        } else {
+            // We're on right child that's complete, check if we can merge with left sibling
+            int leftSiblingIndex = FindSibling(data, data->currentFocusIndex);
+            if (leftSiblingIndex >= 0 && data->subarrays[leftSiblingIndex].size == 1) {
+                // Both siblings are single elements, start merge phase
+                printf("Both children are single elements, starting merge phase\n");
+                
+                data->leftMergeIndex = leftSiblingIndex;           // Left sibling
+                data->rightMergeIndex = data->currentFocusIndex;   // Right child (current focus)
+                data->leftPointer = 0;
+                data->rightPointer = 0;
+                data->highlightingEnabled = true;
+                
+                // Switch to merge phase for this pair
+                data->currentPhase = PHASE_MERGING;
+                data->currentFocusIndex = -1; // No focus during merging
+                
+                printf("Started merging subarrays %d and %d\n", data->leftMergeIndex, data->rightMergeIndex);
+                return;
+            } else {
+                // Right child complete but left sibling not single element yet
+                // This means left sibling is still being processed, wait
+                printf("Right child complete, waiting for left sibling to complete\n");
+                data->currentFocusIndex = -1; // No focus while waiting
+                return;
+            }
+        }
+    }
+    
+    // Check if all subarrays are single elements (recursion complete)
+    bool allSingleElements = true;
+    for (int i = 0; i < data->subarrayCount; i++) {
+        if (data->subarrays[i].isActive && data->subarrays[i].size > 1) {
+            allSingleElements = false;
+            break;
+        }
+    }
+    
+    if (allSingleElements && !data->recursionComplete) {
+        data->recursionComplete = true;
+        data->currentFocusIndex = -1; // No focus needed during merge phase
+        printf("All subarrays are single elements - recursion complete, ready for merging\n");
+    }
+    
+    // Update focus states for all subarrays
+    UpdateSubarrayFocusStates(data);
+}
+
+static void UpdateSubarrayFocusStates(MergeSortData* data) {
+    // Update canSplit property based on focus - only focused subarray can be split
+    for (int i = 0; i < data->subarrayCount; i++) {
+        Subarray* sub = &data->subarrays[i];
+        if (sub->isActive && sub->size > 1) {
+            // Only allow splitting if this subarray is currently focused
+            sub->canSplit = (i == data->currentFocusIndex);
+        } else {
+            // Single elements cannot be split regardless of focus
+            sub->canSplit = false;
+        }
+    }
+}
+
+static void HandleMergeCompletion(MergeSortData* data, GameData* game) {
+    // Called when a merge pair is completed
+    // Remove the merged subarrays and continue with next pair or return to splitting
+    
+    if (data->leftMergeIndex >= 0 && data->rightMergeIndex >= 0) {
+        // Mark merged subarrays as exhausted
+        data->subarrays[data->leftMergeIndex].isExhausted = true;
+        data->subarrays[data->rightMergeIndex].isExhausted = true;
+        
+        printf("Merge completed for subarrays %d and %d\n", data->leftMergeIndex, data->rightMergeIndex);
+        
+        // Clean up exhausted subarrays
+        for (int i = data->subarrayCount - 1; i >= 0; i--) {
+            if (data->subarrays[i].isExhausted) {
+                // Free memory
+                free(data->subarrays[i].elements);
+                free(data->subarrays[i].platforms);
+                
+                // Remove from array by shifting
+                for (int j = i; j < data->subarrayCount - 1; j++) {
+                    data->subarrays[j] = data->subarrays[j + 1];
+                }
+                data->subarrayCount--;
+            }
+        }
+        
+        printf("Cleaned up exhausted subarrays, %d remaining\n", data->subarrayCount);
+        
+        // Reset merge state
+        data->leftMergeIndex = -1;
+        data->rightMergeIndex = -1;
+        data->highlightingEnabled = false;
+        
+        // Check if there are more subarrays to process
+        bool hasMultiElementSubarrays = false;
+        for (int i = 0; i < data->subarrayCount; i++) {
+            if (data->subarrays[i].isActive && data->subarrays[i].size > 1) {
+                hasMultiElementSubarrays = true;
+                break;
+            }
+        }
+        
+        if (hasMultiElementSubarrays) {
+            // Return to splitting phase - focus will be set by caller
+            data->currentPhase = PHASE_SPLITTING;
+        } else {
+            // All subarrays are single elements or we're done
+            if (data->subarrayCount == 0) {
+                // All merged back to original array
+                data->currentPhase = PHASE_COMPLETE;
+                printf("Merge sort complete!\n");
+            } else {
+                // Find more mergeable pairs
+                FindMergeablePairs(data);
+                if (!data->highlightingEnabled) {
+                    // No more pairs, complete
+                    data->currentPhase = PHASE_COMPLETE;
+                    printf("No more mergeable pairs - merge sort complete!\n");
+                }
+            }
+        }
+        
+        // Update platform positions after cleanup
+        UpdateAllPlatforms(data, game);
+    }
+}
+
+static int FindNextFocusAfterMerge(MergeSortData* data, int mergedParentIndex) {
+    // Find the next subarray to focus on after completing a merge
+    // Following proper depth-first merge sort recursion order
+    
+    // After a merge completes, we need to check the focus stack to see where we came from
+    // The proper order is: complete left subtree, then right subtree, then merge parent
+    
+    // Pop from focus stack to get the parent that was being processed
+    if (data->focusStackSize > 0) {
+        int parentFocus = PopFocusStack(data);
+        
+        // Check if this parent has a right sibling that needs processing
+        if (parentFocus >= 0 && parentFocus < data->subarrayCount) {
+            Subarray* parent = &data->subarrays[parentFocus];
+            
+            // If parent is a left child, look for its right sibling
+            if (parent->isLeftChild) {
+                for (int i = 0; i < data->subarrayCount; i++) {
+                    Subarray* sub = &data->subarrays[i];
+                    if (sub->isActive && sub->size > 1 && 
+                        sub->level == parent->level && 
+                        sub->parentIndex == parent->parentIndex &&
+                        !sub->isLeftChild) {
+                        // Found right sibling that needs processing
+                        return i;
+                    }
+                }
+            }
+            
+            // No right sibling or parent is right child, continue up the stack
+            return FindNextFocusAfterMerge(data, parent->parentIndex);
+        }
+    }
+    
+    // Stack is empty or invalid, look for any remaining subarrays that need splitting
+    // Start from highest level and work down
+    for (int level = data->maxLevel; level >= 1; level--) {
+        for (int i = 0; i < data->subarrayCount; i++) {
+            Subarray* sub = &data->subarrays[i];
+            if (sub->isActive && sub->size > 1 && sub->level == level) {
+                return i;
+            }
+        }
+    }
+    
+    return -1; // No more subarrays to process
+}
+
+static void PrintMergeSortState(MergeSortData* data) {
+    printf("=== MERGE SORT STATE ===\n");
+    printf("Phase: %s\n", 
+           data->currentPhase == PHASE_SPLITTING ? "SPLITTING" :
+           data->currentPhase == PHASE_MERGING ? "MERGING" : "COMPLETE");
+    printf("Current Focus: %d\n", data->currentFocusIndex);
+    printf("Stack Size: %d\n", data->focusStackSize);
+    printf("Subarrays (%d total):\n", data->subarrayCount);
+    
+    for (int i = 0; i < data->subarrayCount; i++) {
+        Subarray* sub = &data->subarrays[i];
+        if (sub->isActive) {
+            printf("  [%d] Level %d, Size %d, %s child, Parent %d, Elements: [", 
+                   i, sub->level, sub->size, 
+                   sub->isLeftChild ? "Left" : "Right", 
+                   sub->parentIndex);
+            for (int j = 0; j < sub->size; j++) {
+                printf("%d", sub->elements[j]);
+                if (j < sub->size - 1) printf(",");
+            }
+            printf("]\n");
+        }
+    }
+    printf("========================\n");
 }

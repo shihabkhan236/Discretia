@@ -14,4 +14,8 @@ void MergeSortResetLevel(GameData *game, int level);
 // Additional collision detection for subarrays
 int MergeSortGetPlayerPlatform(GameData *game);
 
+// Get carried number for player display
+int MergeSortGetCarriedNumber(GameData *game);
+bool MergeSortIsCarryingNumber(GameData *game);
+
 #endif // MERGE_SORT_H
