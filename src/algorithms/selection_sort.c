@@ -141,8 +141,8 @@ void SelectionSortUpdate(GameData* game) {
         }
     }
     
-    if (allFilled && IsArraySorted(game->array, game->arraySize, true)) {
-        ChangeState(STATE_LEVEL_COMPLETE);
+    if (allFilled && IsReadyForCompletion(game)) {
+        StartCompletionAnimation();
     }
 }
 

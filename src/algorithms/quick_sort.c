@@ -97,9 +97,9 @@ void QuickSortUpdate(GameData *game)
         return;
 
     // Check if sorting is complete
-    if (IsArraySorted(game->array, game->arraySize, true))
+    if (IsReadyForCompletion(game))
     {
-        ChangeState(STATE_LEVEL_COMPLETE);
+        StartCompletionAnimation();
         return;
     }
 

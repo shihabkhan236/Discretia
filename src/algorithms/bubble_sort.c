@@ -46,10 +46,10 @@ void BubbleSortUpdate(GameData *game)
             data->currentI++;
             data->currentJ = 0;
 
-            // Check if bubble sort is complete
-            if (data->currentI >= game->arraySize - 1)
+            // Check if bubble sort is complete using verification system
+            if (IsReadyForCompletion(game))
             {
-                ChangeState(STATE_LEVEL_COMPLETE);
+                StartCompletionAnimation();
                 return;
             }
             printf("Pass %d complete, starting pass %d\n", data->currentI - 1, data->currentI);
@@ -234,10 +234,10 @@ void BubbleSortUpdate(GameData *game)
         return;
     }
 
-    // Check for completion - all elements must be in ascending order
-    if (IsArraySorted(game->array, game->arraySize, true))
+    // Check for completion using new verification system
+    if (IsReadyForCompletion(game))
     {
-        ChangeState(STATE_LEVEL_COMPLETE);
+        StartCompletionAnimation();
     }
 }
 

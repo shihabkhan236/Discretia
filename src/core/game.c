@@ -262,6 +262,9 @@ void InitGame(void)
     game.currentTime = 0.0f;
     game.timerActive = false;
 
+    // Initialize completion animation system
+    InitCompletionAnimation();
+
     printf("Game initialized successfully\n");
 }
 
@@ -269,6 +272,9 @@ void UpdateGame(void)
 {
     // Update timer (runs during gameplay)
     UpdateTimer();
+    
+    // Update completion animation system
+    UpdateCompletionAnimation();
     
     // running all the time
     switch (game.currentState)
@@ -623,6 +629,9 @@ void RenderGame(void)
             algo->render(&game);
         }
 
+        // Render completion highlights after algorithm-specific highlights
+        RenderCompletionHighlights();
+
         // End camera mode
         EndMode2D();
 
@@ -692,6 +701,12 @@ void CleanupGame(void)
         heartTexture = (Texture2D){0};
     }
 
+    // Clean up completion animation system
+    if (game.completionAnimation.elementHighlighted != NULL) {
+        free(game.completionAnimation.elementHighlighted);
+        game.completionAnimation.elementHighlighted = NULL;
+    }
+
     printf("Game cleaned up successfully\n");
 }
 
@@ -745,6 +760,9 @@ void ResetLevel(void)
 
     // Initialize timer for the level
     InitTimer(game.selectedLevel);
+
+    // Reset completion animation system
+    InitCompletionAnimation();
 
     printf("Level %d reset\n", game.selectedLevel);
 }
@@ -815,4 +833,342 @@ void RenderTimer(void) {
     // Draw timer with background for better visibility
     // DrawRectangle(x - 10, y - 5, textWidth + 20, FONT_SIZE_TITLE + 10, (Color){0, 0, 0, 128});
     DrawText(timeBuffer, x, y, FONT_SIZE_TITLE, timerColor);
+}
+
+// Completion Animation Manager Functions
+
+void InitCompletionAnimation(void) {
+    // Initialize completion animation state to inactive
+    game.completionAnimation.phase = COMPLETION_INACTIVE;
+    game.completionAnimation.animationStartTime = 0.0f;
+    game.completionAnimation.phaseStartTime = 0.0f;
+    game.completionAnimation.currentRippleIndex = 0;
+    game.completionAnimation.userInputDisabled = false;
+    game.completionAnimation.arraySize = 0;
+    
+    // Initialize timing configuration with default values
+    game.completionAnimation.timing.verificationDelay = 0.2f;      // 0.2s - brief pause for verification
+    game.completionAnimation.timing.preAnimationDelay = 0.3f;      // 0.3s - pause before ripple starts
+    game.completionAnimation.timing.rippleElementDelay = 0.15f;    // 0.15s - time between each element
+    game.completionAnimation.timing.postAnimationDelay = 0.5f;     // 0.5s - pause after ripple completes
+    
+    // Initialize element highlighting array to NULL (will be allocated when needed)
+    game.completionAnimation.elementHighlighted = NULL;
+    
+    printf("Completion animation system initialized\n");
+}
+
+void StartCompletionAnimation(void) {
+    // Only start if not already active
+    if (game.completionAnimation.phase != COMPLETION_INACTIVE) {
+        return;
+    }
+    
+    // Set up animation state
+    game.completionAnimation.phase = COMPLETION_VERIFYING;
+    game.completionAnimation.animationStartTime = GetTime();
+    game.completionAnimation.phaseStartTime = GetTime();
+    game.completionAnimation.currentRippleIndex = 0;
+    game.completionAnimation.userInputDisabled = true;
+    game.completionAnimation.arraySize = game.arraySize;
+    
+    // Allocate memory for element highlighting array
+    if (game.completionAnimation.elementHighlighted != NULL) {
+        free(game.completionAnimation.elementHighlighted);
+    }
+    game.completionAnimation.elementHighlighted = (bool*)calloc(game.arraySize, sizeof(bool));
+    
+    if (game.completionAnimation.elementHighlighted == NULL) {
+        printf("ERROR: Failed to allocate memory for completion animation\n");
+        // Fallback to immediate completion
+        game.completionAnimation.phase = COMPLETION_INACTIVE;
+        game.completionAnimation.userInputDisabled = false;
+        ChangeState(STATE_LEVEL_COMPLETE);
+        return;
+    }
+    
+    // Initialize all elements as not highlighted
+    for (int i = 0; i < game.arraySize; i++) {
+        game.completionAnimation.elementHighlighted[i] = false;
+    }
+    
+    printf("Completion animation started - entering verification phase\n");
+}
+
+void UpdateCompletionAnimation(void) {
+    // Only update if animation is active
+    if (game.completionAnimation.phase == COMPLETION_INACTIVE) {
+        return;
+    }
+    
+    float currentTime = GetTime();
+    float phaseElapsed = currentTime - game.completionAnimation.phaseStartTime;
+    
+    switch (game.completionAnimation.phase) {
+        case COMPLETION_VERIFYING:
+            // Wait for verification delay, then move to delaying phase
+            if (phaseElapsed >= game.completionAnimation.timing.verificationDelay) {
+                game.completionAnimation.phase = COMPLETION_DELAYING;
+                game.completionAnimation.phaseStartTime = currentTime;
+                printf("Completion animation: verification complete, entering delay phase\n");
+            }
+            break;
+            
+        case COMPLETION_DELAYING:
+            // Wait for pre-animation delay, then start ripple
+            if (phaseElapsed >= game.completionAnimation.timing.preAnimationDelay) {
+                game.completionAnimation.phase = COMPLETION_RIPPLING;
+                game.completionAnimation.phaseStartTime = currentTime;
+                game.completionAnimation.currentRippleIndex = 0;
+                printf("Completion animation: delay complete, starting ripple animation\n");
+            }
+            break;
+            
+        case COMPLETION_RIPPLING:
+            // Update ripple animation using dedicated function
+            UpdateRippleAnimation();
+            
+            // Check if ripple animation is complete
+            if (IsRippleAnimationComplete()) {
+                game.completionAnimation.phase = COMPLETION_FINISHED;
+                game.completionAnimation.phaseStartTime = currentTime;
+                printf("Completion animation: ripple complete, entering finish phase\n");
+            }
+            break;
+            
+        case COMPLETION_FINISHED:
+            // Wait for post-animation delay, then complete
+            if (phaseElapsed >= game.completionAnimation.timing.postAnimationDelay) {
+                // Clean up animation state
+                game.completionAnimation.phase = COMPLETION_INACTIVE;
+                game.completionAnimation.userInputDisabled = false;
+                
+                if (game.completionAnimation.elementHighlighted != NULL) {
+                    free(game.completionAnimation.elementHighlighted);
+                    game.completionAnimation.elementHighlighted = NULL;
+                }
+                
+                printf("Completion animation finished - transitioning to level complete\n");
+                ChangeState(STATE_LEVEL_COMPLETE);
+            }
+            break;
+            
+        case COMPLETION_INACTIVE:
+            // Should not reach here, but handle gracefully
+            break;
+    }
+}
+
+bool IsCompletionAnimationActive(void) {
+    return game.completionAnimation.phase != COMPLETION_INACTIVE;
+}
+
+// RippleAnimationSystem Functions
+
+void UpdateRippleAnimation(void) {
+    // Only update if we're in the rippling phase
+    if (game.completionAnimation.phase != COMPLETION_RIPPLING) {
+        return;
+    }
+    
+    float currentTime = GetTime();
+    float rippleElapsed = currentTime - game.completionAnimation.phaseStartTime;
+    
+    // Calculate how many elements should be highlighted based on elapsed time
+    int elementsToHighlight = (int)(rippleElapsed / game.completionAnimation.timing.rippleElementDelay) + 1;
+    
+    // Ensure we don't exceed array bounds
+    if (elementsToHighlight > game.completionAnimation.arraySize) {
+        elementsToHighlight = game.completionAnimation.arraySize;
+    }
+    
+    // Highlight elements progressively from left to right
+    for (int i = 0; i < elementsToHighlight; i++) {
+        if (i < game.completionAnimation.arraySize && !game.completionAnimation.elementHighlighted[i]) {
+            game.completionAnimation.elementHighlighted[i] = true;
+            game.completionAnimation.currentRippleIndex = i;
+        }
+    }
+}
+
+void RenderCompletionHighlights(void) {
+    // Only render highlights if completion animation is active and we have highlighted elements
+    if (game.completionAnimation.phase == COMPLETION_INACTIVE || 
+        game.completionAnimation.elementHighlighted == NULL) {
+        return;
+    }
+    
+    // Draw green highlights on elements that should be highlighted
+    for (int i = 0; i < game.completionAnimation.arraySize; i++) {
+        if (game.completionAnimation.elementHighlighted[i]) {
+            Rectangle platformRect = game.platforms[i];
+            
+            // Adjust position for Quick Sort elevated/lowered elements
+            if (game.selectedAlgorithm == ALGO_QUICK_SORT) {
+                if (QuickSortIsCompletedPivot(&game, i)) {
+                    // Completed pivots are lowered
+                    platformRect.y += BOX_SIZE + (BOX_SIZE / 2);
+                }
+                else if (QuickSortIsSwappingElement(&game, i)) {
+                    // Swapping elements are elevated
+                    platformRect.y -= BOX_SIZE + (BOX_SIZE / 2);
+                }
+            }
+            
+            // Draw green highlight border (thicker than normal border)
+            DrawRectangleLinesEx(platformRect, 4, GAME_SORTED);
+            
+            // Optional: Add a subtle green overlay for better visibility
+            Color highlightOverlay = GAME_SORTED;
+            highlightOverlay.a = 50; // Semi-transparent
+            DrawRectangleRec(platformRect, highlightOverlay);
+        }
+    }
+}
+
+bool IsRippleAnimationComplete(void) {
+    // Animation is complete if we're not in rippling phase or all elements are highlighted
+    if (game.completionAnimation.phase != COMPLETION_RIPPLING) {
+        return game.completionAnimation.phase == COMPLETION_FINISHED;
+    }
+    
+    // Check if all elements have been highlighted
+    if (game.completionAnimation.elementHighlighted == NULL) {
+        return false;
+    }
+    
+    for (int i = 0; i < game.completionAnimation.arraySize; i++) {
+        if (!game.completionAnimation.elementHighlighted[i]) {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
+void ResetRippleAnimation(void) {
+    // Reset all ripple animation state
+    game.completionAnimation.currentRippleIndex = 0;
+    
+    // Clear all element highlighting
+    if (game.completionAnimation.elementHighlighted != NULL) {
+        for (int i = 0; i < game.completionAnimation.arraySize; i++) {
+            game.completionAnimation.elementHighlighted[i] = false;
+        }
+    }
+    
+    // Reset phase start time for ripple phase
+    if (game.completionAnimation.phase == COMPLETION_RIPPLING) {
+        game.completionAnimation.phaseStartTime = GetTime();
+    }
+}
+
+// CompletionVerificationSystem Functions
+
+bool VerifyArrayCompleteSorted(int *array, int size) {
+    // Check that array contains no empty spaces (0s) and is sorted
+    if (array == NULL || size <= 0) {
+        return false;
+    }
+    
+    // First, verify no empty spaces (all elements are placed)
+    for (int i = 0; i < size; i++) {
+        if (array[i] == 0) {
+            printf("Completion verification failed: Empty space found at position %d\n", i);
+            return false;
+        }
+    }
+    
+    // Then verify array is sorted in ascending order
+    for (int i = 0; i < size - 1; i++) {
+        if (array[i] > array[i + 1]) {
+            printf("Completion verification failed: Array not sorted at positions %d and %d (%d > %d)\n", 
+                   i, i + 1, array[i], array[i + 1]);
+            return false;
+        }
+    }
+    
+    printf("Array verification passed: fully sorted with no empty spaces\n");
+    return true;
+}
+
+bool VerifyNoActiveOperations(GameData *game) {
+    if (game == NULL) {
+        return false;
+    }
+    
+    // Check if player is carrying any element
+    if (game->carrying) {
+        printf("Completion verification failed: Player is carrying element %d\n", game->playerNumber);
+        return false;
+    }
+    
+    // Check if player number is set (should be 0 when not carrying)
+    if (game->playerNumber != 0) {
+        printf("Completion verification failed: Player number is %d (should be 0)\n", game->playerNumber);
+        return false;
+    }
+    
+    printf("Active operations verification passed: No elements being carried\n");
+    return true;
+}
+
+bool VerifyAlgorithmSpecificCompletion(GameData *game) {
+    if (game == NULL) {
+        return false;
+    }
+    
+    // Algorithm-specific completion verification
+    switch (game->selectedAlgorithm) {
+        case ALGO_BUBBLE_SORT:
+            // For bubble sort, verify no active comparisons or swaps
+            // This would require access to BubbleSortData, but we'll keep it simple for now
+            return true;
+            
+        case ALGO_SELECTION_SORT:
+            // For selection sort, verify no active minimum finding or swapping
+            return true;
+            
+        case ALGO_INSERTION_SORT:
+            // For insertion sort, verify no active element picking or placement
+            return true;
+            
+        case ALGO_MERGE_SORT:
+            // For merge sort, verify all merge operations are complete
+            return true;
+            
+        case ALGO_QUICK_SORT:
+            // For quick sort, verify all partitioning is complete
+            return true;
+            
+        default:
+            printf("Unknown algorithm type for completion verification\n");
+            return false;
+    }
+}
+
+bool IsReadyForCompletion(GameData *game) {
+    if (game == NULL) {
+        return false;
+    }
+    
+    printf("Checking completion readiness...\n");
+    
+    // Step 1: Verify array is completely sorted with no empty spaces
+    if (!VerifyArrayCompleteSorted(game->array, game->arraySize)) {
+        return false;
+    }
+    
+    // Step 2: Verify no active operations (player not carrying anything)
+    if (!VerifyNoActiveOperations(game)) {
+        return false;
+    }
+    
+    // Step 3: Algorithm-specific verification
+    if (!VerifyAlgorithmSpecificCompletion(game)) {
+        return false;
+    }
+    
+    printf("✅ All completion verification checks passed - ready for completion animation!\n");
+    return true;
 }

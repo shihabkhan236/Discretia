@@ -112,9 +112,9 @@ void InsertionSortUpdate(GameData *game)
             // Check if insertion sort is complete
             if (data->currentIndex >= game->arraySize)
             {
-                if (IsArraySorted(game->array, game->arraySize, true))
+                if (IsReadyForCompletion(game))
                 {
-                    ChangeState(STATE_LEVEL_COMPLETE);
+                    StartCompletionAnimation();
                 }
             }
         }
@@ -360,9 +360,9 @@ void InsertionSortUpdate(GameData *game)
             }
         }
 
-        if (allFilled && IsArraySorted(game->array, game->arraySize, true))
+        if (allFilled && IsReadyForCompletion(game))
         {
-            ChangeState(STATE_LEVEL_COMPLETE);
+            StartCompletionAnimation();
         }
     }
 }

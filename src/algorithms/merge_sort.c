@@ -553,8 +553,8 @@ void MergeSortUpdate(GameData* game) {
     }
     
     // Handle level completion
-    if (game->gameComplete && data->currentPhase == PHASE_COMPLETE) {
-        ChangeState(STATE_LEVEL_COMPLETE);
+    if (game->gameComplete && data->currentPhase == PHASE_COMPLETE && IsReadyForCompletion(game)) {
+        StartCompletionAnimation();
     }
 }
 

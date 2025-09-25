@@ -40,6 +40,38 @@ typedef enum
     ALGO_QUICK_SORT
 } AlgorithmType;
 
+// Completion Animation Types
+typedef enum
+{
+    COMPLETION_INACTIVE,
+    COMPLETION_VERIFYING,
+    COMPLETION_DELAYING,
+    COMPLETION_RIPPLING,
+    COMPLETION_FINISHED
+} CompletionAnimationPhase;
+
+// Animation timing configuration
+typedef struct
+{
+    float verificationDelay;      // 0.2s - brief pause for verification
+    float preAnimationDelay;      // 0.3s - pause before ripple starts
+    float rippleElementDelay;     // 0.15s - time between each element
+    float postAnimationDelay;     // 0.5s - pause after ripple completes
+} AnimationTimingConfig;
+
+// Completion animation state
+typedef struct
+{
+    CompletionAnimationPhase phase;
+    float animationStartTime;
+    float phaseStartTime;
+    int currentRippleIndex;
+    bool userInputDisabled;
+    bool* elementHighlighted;
+    int arraySize;
+    AnimationTimingConfig timing;
+} CompletionAnimationState;
+
 // Forward declarations
 typedef struct GameData GameData;
 typedef struct Algorithm Algorithm;
@@ -111,6 +143,9 @@ struct GameData
     // Add camera
     Camera2D camera;
     int cameraMode; // For switching between camera types
+
+    // Completion animation system
+    CompletionAnimationState completionAnimation;
 };
 
 // Global game instance
@@ -142,5 +177,23 @@ void CalculateQuickSortBoxPositions(Rectangle *platforms, int arraySize, GameDat
 
 // find the platform player is on
 int GetPlayerPlatform(GameData *game);
+
+// Completion Animation Manager functions
+void InitCompletionAnimation(void);
+void StartCompletionAnimation(void);
+void UpdateCompletionAnimation(void);
+bool IsCompletionAnimationActive(void);
+
+// RippleAnimationSystem functions
+void UpdateRippleAnimation(void);
+void RenderCompletionHighlights(void);
+bool IsRippleAnimationComplete(void);
+void ResetRippleAnimation(void);
+
+// CompletionVerificationSystem functions
+bool VerifyArrayCompleteSorted(int *array, int size);
+bool VerifyNoActiveOperations(GameData *game);
+bool IsReadyForCompletion(GameData *game);
+bool VerifyAlgorithmSpecificCompletion(GameData *game);
 
 #endif // GAME_H
