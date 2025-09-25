@@ -159,8 +159,8 @@ int GetPlayerPlatform(GameData *game)
             }
             else if (QuickSortIsSwappingElement(game, i))
             {
-                // Move collision detection up with swapping elements (one rectangle higher)
-                platform.y -= BOX_SIZE;
+                // Move collision detection up with swapping elements (1.5 rectangles higher)
+                platform.y -= BOX_SIZE + (BOX_SIZE / 2);
             }
         }
 
@@ -548,37 +548,31 @@ void RenderGame(void)
                 }
                 else if (QuickSortIsSwappingElement(&game, i))
                 {
-                    // Elements involved in pivot swapping go one rectangle higher
-                    platformRect.y -= BOX_SIZE;
+                    // Elements involved in pivot swapping go 1.5 rectangles higher
+                    platformRect.y -= BOX_SIZE + (BOX_SIZE / 2);
                 }
             }
 
+            // Get player platform for highlighting
+            int playerPlatformIndex = GetPlayerPlatform(&game);
+
+            // Draw the platform rectangle
             DrawRectangleRec(platformRect, platformColor);
-            DrawRectangleLinesEx(platformRect, 2, LIGHTGRAY); // border
 
-            // Draw platforms
-            int playerPlatformIndex = GetPlayerPlatform(&game); // Get the single platform player is on
+            // Choose border color
+            Color borderColor = (playerPlatformIndex == i) ? BLACK : LIGHTGRAY;
+            DrawRectangleLinesEx(platformRect, 2, borderColor);
 
-            for (int i = 0; i < game.arraySize; i++)
+            // Draw the number on the platform (at the adjusted position)
+            if (game.array[i] != 0)
             {
-                Rectangle platform = game.platforms[i];
+                char numText[8];
+                sprintf(numText, "%d", game.array[i]);
 
-                DrawRectangleRec(platform, UI_BUTTON_NORMAL);
-
-                // Highlight only the single platform the player is actually on
-                Color borderColor = (playerPlatformIndex == i) ? BLACK : LIGHTGRAY;
-                DrawRectangleLinesEx(platform, 2, borderColor);
-
-                if (game.array[i] != 0)
-                {
-                    char numText[8];
-                    sprintf(numText, "%d", game.array[i]);
-
-                    DrawCenteredText(numText,
-                                     platform.x + platform.width / 2,
-                                     platform.y + platform.height / 2,
-                                     FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
-                }
+                DrawCenteredText(numText,
+                                 platformRect.x + platformRect.width / 2,
+                                 platformRect.y + platformRect.height / 2,
+                                 FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
             }
         }
 

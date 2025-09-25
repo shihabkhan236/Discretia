@@ -417,24 +417,8 @@ void QuickSortRender(GameData *game)
         DrawRectangleLinesEx(game->platforms[idx], 2, DARKGREEN);
     }
 
-    // Draw partition separators and labels
-    if (data->i >= 0 && data->i < game->arraySize - 1)
-    {
-        // Draw separator line after left partition
-        int separatorX = game->platforms[data->i].x + game->platforms[data->i].width + 10;
-        DrawLine(separatorX, game->platforms[data->i].y - 10,
-                 separatorX, game->platforms[data->i].y + BOX_SIZE + 10, DARKGREEN);
-        DrawText("≤", separatorX - 5, game->platforms[data->i].y + BOX_SIZE + 15, FONT_SIZE_SMALL, DARKGREEN);
-    }
-
-    if (data->pivotIndex > 0 && data->pivotIndex != data->i + 1)
-    {
-        // Draw separator line before pivot
-        int separatorX = game->platforms[data->pivotIndex].x - 10;
-        DrawLine(separatorX, game->platforms[data->pivotIndex].y - 10,
-                 separatorX, game->platforms[data->pivotIndex].y + BOX_SIZE + 10, YELLOW);
-        DrawText("P", separatorX - 5, game->platforms[data->pivotIndex].y + BOX_SIZE + 15, FONT_SIZE_SMALL, YELLOW);
-    }
+    // Draw partition separators and labels - REMOVED FOR CLEANER UI
+    // Separator lines and indicators removed to improve visual clarity
 
     // Highlight current player platform if they can interact
     int playerPlatform = GetPlayerPlatform(game);
@@ -660,10 +644,10 @@ static void CompleteComparison(QuickSortData *data, GameData *game)
         {
             // Enter pivot swapping mode - user must swap manually
             data->pivotSwapping = true;
-            data->hideOtherValues = true;
+            data->hideOtherValues = false; // Keep values visible during pivot swapping
             data->comparing = false;
             printf("🎯 TIME TO SWAP PIVOT! Swap arr[i+1=%d] with pivot[%d]\n", finalPivotPos, data->pivotIndex);
-            printf("All other values are hidden until you complete the pivot swap!\n");
+            printf("Values remain visible during pivot swap!\n");
         }
         else
         {
@@ -698,16 +682,8 @@ static void CompleteComparison(QuickSortData *data, GameData *game)
 // Utility function for UI rendering - returns true if value at position should be hidden
 bool QuickSortShouldHideValue(GameData *game, int position)
 {
-    if (!game || !game->algorithmData)
-        return false;
-
-    QuickSortData *data = (QuickSortData *)game->algorithmData;
-    if (!data->hideOtherValues || !data->pivotSwapping)
-        return false;
-
-    // During pivot swapping, hide all values except the pivot and its final position
-    int finalPivotPos = data->i + 1;
-    return (position != data->pivotIndex && position != finalPivotPos);
+    // Values are no longer hidden during pivot swapping for better user experience
+    return false;
 }
 
 bool QuickSortIsCompletedPivot(GameData *game, int position)
