@@ -149,22 +149,38 @@ int GetPlayerPlatform(GameData *game)
     {
         Rectangle platform = game->platforms[i];
 
-        // Adjust platform position based on Quick Sort state
+        // Enhanced collision detection for Quick Sort state
         if (game->selectedAlgorithm == ALGO_QUICK_SORT)
         {
             if (QuickSortIsCompletedPivot(game, i))
             {
-                // Move collision detection down with completed pivots (1.5 rectangles lower)
+                // Adjusted collision positioning: move detection down with completed pivots
                 platform.y += BOX_SIZE + (BOX_SIZE / 2);
             }
             else if (QuickSortIsSwappingElement(game, i))
             {
-                // Move collision detection up with swapping elements (1.5 rectangles higher)
-                platform.y -= BOX_SIZE + (BOX_SIZE / 2);
+                // Dual-height collision checking: check elevated position first
+                Rectangle elevatedPlatform = platform;
+                elevatedPlatform.y -= BOX_SIZE + (BOX_SIZE / 2);
+
+                // Priority 1: Check elevated position collision
+                if (game->player.y + game->player.height <= elevatedPlatform.y + GROUND_TOLERANCE &&
+                    game->player.y + game->player.height + game->velocity.y >= elevatedPlatform.y &&
+                    game->player.x + game->player.width > elevatedPlatform.x + 8 &&
+                    game->player.x < elevatedPlatform.x + elevatedPlatform.width - 8)
+                {
+                    game->player.y = elevatedPlatform.y - game->player.height;
+                    game->velocity.y = 0;
+                    game->isOnGround = true;
+                    return i;
+                }
+
+                // Priority 2: Check original position (allows walking under elevated boxes)
+                // Continue to standard collision check below
             }
         }
 
-        // Check if player is landing on top of platform (MATCH WORKING DEMO EXACTLY)
+        // Standard collision check (for normal platforms and original height of elevated platforms)
         if (game->player.y + game->player.height <= platform.y + GROUND_TOLERANCE &&
             game->player.y + game->player.height + game->velocity.y >= platform.y &&
             game->player.x + game->player.width > platform.x + 8 &&

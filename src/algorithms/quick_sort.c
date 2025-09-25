@@ -362,14 +362,16 @@ void QuickSortRender(GameData *game)
         // Highlight positions in traditional Lomuto algorithm
         if (data->j < game->arraySize)
         {
-            // Highlight j (current element being compared) in blue
-            DrawRectangleLinesEx(game->platforms[data->j], 3, BUBBLE_COMPARE);
+            // Highlight j (current element being compared) in bright orange
+            Color brightOrange = {255, 140, 0, 255}; // Bright orange for high visibility
+            DrawRectangleLinesEx(game->platforms[data->j], 4, brightOrange);
         }
 
         if (data->needsSwap && data->i + 1 < game->arraySize)
         {
-            // Highlight i+1 (where smaller element should go) in green
-            DrawRectangleLinesEx(game->platforms[data->i + 1], 3, GREEN);
+            // Highlight i+1 (where smaller element should go) in bright cyan
+            Color brightCyan = {0, 255, 255, 255}; // Bright cyan for high visibility
+            DrawRectangleLinesEx(game->platforms[data->i + 1], 4, brightCyan);
         }
     }
     else if (data->pivotSwapping)
@@ -383,8 +385,10 @@ void QuickSortRender(GameData *game)
         DrawText("Press F to swap the pivot to its final position!", 20, 200, FONT_SIZE_SMALL, GAME_COMPARING);
 
         // Highlight the two positions that need to be swapped
-        DrawRectangleLinesEx(game->platforms[finalPivotPos], 4, GREEN);     // Final position
-        DrawRectangleLinesEx(game->platforms[data->pivotIndex], 4, YELLOW); // Current pivot
+        Color brightCyan = {0, 255, 255, 255};                                     // Bright cyan for final position
+        Color brightMagenta = {255, 0, 255, 255};                                  // Bright magenta for current pivot
+        DrawRectangleLinesEx(game->platforms[finalPivotPos], 4, brightCyan);       // Final position
+        DrawRectangleLinesEx(game->platforms[data->pivotIndex], 4, brightMagenta); // Current pivot
     }
     else
     {
