@@ -333,7 +333,23 @@ void MergeSortUpdate(GameData* game) {
                         abs((int)(game->player.y + game->player.height - platform.y)) < GROUND_TOLERANCE) {
                         
                         if (!data->hasNumber && sub->elements[j] != 0) {
-                            // Pick up element from subarray
+                            // Check if this is the correct element to pick up during merge phase
+                            bool isCorrectChoice = (data->highlightingEnabled && 
+                                                  i == data->highlightedSubarray && 
+                                                  j == data->highlightedElement);
+                            
+                            if (data->highlightingEnabled && !isCorrectChoice) {
+                                // Player tried to pick up the wrong element - deduct heart and prevent pickup
+                                game->hearts--;
+                                printf("Wrong choice! You must pick the smaller element first. Hearts remaining: %d\n", game->hearts);
+                                
+                                if (game->hearts <= 0) {
+                                    ChangeState(STATE_GAME_OVER);
+                                }
+                                return; // Don't allow the pickup
+                            }
+                            
+                            // Pick up element from subarray (correct choice or not in merge highlighting mode)
                             data->playerCarrying = sub->elements[j];
                             data->hasNumber = true;
                             sub->elements[j] = 0; // Empty the box
@@ -548,6 +564,27 @@ void MergeSortRender(GameData* game) {
     
     // The original array is rendered by game.c - we just render additional subarrays
     
+    // Find which specific subarray platform the player is on (if any)
+    int playerSubarrayIndex = -1;
+    int playerElementIndex = -1;
+    
+    for (int i = 0; i < data->subarrayCount; i++) {
+        Subarray* sub = &data->subarrays[i];
+        if (!sub->isActive) continue;
+        
+        for (int j = 0; j < sub->size; j++) {
+            Rectangle platform = sub->platforms[j];
+            if (game->player.x + game->player.width > platform.x + 8 && 
+                game->player.x < platform.x + platform.width - 8 &&
+                abs((int)(game->player.y + game->player.height - platform.y)) < GROUND_TOLERANCE) {
+                playerSubarrayIndex = i;
+                playerElementIndex = j;
+                break; // Found the platform, stop searching
+            }
+        }
+        if (playerSubarrayIndex >= 0) break; // Found the platform, stop searching
+    }
+    
     // Render all active subarrays (positioned above original array)
     for (int i = 0; i < data->subarrayCount; i++) {
         Subarray* sub = &data->subarrays[i];
@@ -557,10 +594,8 @@ void MergeSortRender(GameData* game) {
         for (int j = 0; j < sub->size; j++) {
             Rectangle platform = sub->platforms[j];
             
-            // Check if player is standing on this platform
-            bool playerOnPlatform = (game->player.x + game->player.width > platform.x + 8 && 
-                                   game->player.x < platform.x + platform.width - 8 &&
-                                   abs((int)(game->player.y + game->player.height - platform.y)) < GROUND_TOLERANCE);
+            // Check if this is the specific platform the player is on
+            bool playerOnPlatform = (playerSubarrayIndex == i && playerElementIndex == j);
             
             // Check different highlight states
             bool isCorrectChoice = (data->highlightingEnabled && 
