@@ -456,15 +456,14 @@ void RenderGame(void)
         Rectangle startBtn = {SCREEN_WIDTH / 2 - BUTTON_WIDTH / 2, 300, BUTTON_WIDTH, BUTTON_HEIGHT};
         Rectangle quitBtn = {SCREEN_WIDTH / 2 - BUTTON_WIDTH / 2, 380, BUTTON_WIDTH, BUTTON_HEIGHT};
 
-        Color startColor = (game.selectedButton == 0) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
-        Color quitColor = (game.selectedButton == 1) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
+        Color startColor = (game.selectedButton == 0) ? BLACK : LIGHTGRAY;
+        Color quitColor = (game.selectedButton == 1) ? BLACK : LIGHTGRAY;
 
-        DrawRectangleRec(startBtn, startColor);
-        DrawRectangleLinesEx(startBtn, 2, UI_BORDER);
+        DrawRectangleLinesEx(startBtn, 3, startColor);
         DrawCenteredText("START GAME", startBtn.x + startBtn.width / 2, startBtn.y + startBtn.height / 2, FONT_SIZE_BUTTON, UI_TEXT_PRIMARY);
 
-        DrawRectangleRec(quitBtn, quitColor);
-        DrawRectangleLinesEx(quitBtn, 2, UI_BORDER);
+
+        DrawRectangleLinesEx(quitBtn, 3, quitColor);
         DrawCenteredText("QUIT", quitBtn.x + quitBtn.width / 2, quitBtn.y + quitBtn.height / 2, FONT_SIZE_BUTTON, UI_TEXT_PRIMARY);
         break;
 
@@ -486,9 +485,8 @@ void RenderGame(void)
                 BUTTON_WIDTH,
                 BUTTON_HEIGHT};
 
-            Color btnColor = (game.selectedButton == i) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
-            DrawRectangleRec(btn, btnColor);
-            DrawRectangleLinesEx(btn, 2, UI_BORDER);
+            Color btnColor = (game.selectedButton == i) ? BLACK : LIGHTGRAY;
+            DrawRectangleLinesEx(btn, 3, btnColor);
             // Convert to uppercase for better appearance with Mecha font
             char algoNameUpper[32];
             strncpy(algoNameUpper, algoNames[i], sizeof(algoNameUpper) - 1);
@@ -498,7 +496,7 @@ void RenderGame(void)
                 algoNameUpper[j] = toupper(algoNameUpper[j]);
             }
 
-            int fontSize = FONT_SIZE_BUTTON;
+            int fontSize = FONT_SIZE_BUTTON * 0.8;
             int textWidth = MeasureText(algoNameUpper, fontSize);
 
             while (textWidth > btn.width - 10 && fontSize > 10)
@@ -508,10 +506,6 @@ void RenderGame(void)
             }
 
             DrawCenteredText(algoNameUpper, btn.x + btn.width / 2, btn.y + btn.height / 2, fontSize, UI_TEXT_PRIMARY);
-            // DrawTextEx(gameFont, algoNameUpper,
-            //           (Vector2){btn.x + (btn.width - MeasureTextEx(gameFont, algoNameUpper, FONT_SIZE_BUTTON, 1).x)/2,
-            //                    btn.y + (btn.height - FONT_SIZE_BUTTON)/2},
-            //           FONT_SIZE_BUTTON, 1, UI_TEXT_PRIMARY);
         }
         break;
 
@@ -527,16 +521,12 @@ void RenderGame(void)
             Rectangle btn = {levelStartX + i * 70, levelY, 70, 70};
             Color btnColor = (game.selectedButton == i) ? BLACK : LIGHTGRAY;
 
-            DrawRectangleLinesEx(btn, 2, btnColor);
+            DrawRectangleLinesEx(btn, 3, btnColor);
 
-            if (i == 0)
-            {
-                DrawCenteredText("?", btn.x + btn.width / 2, btn.y + btn.height / 2, FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
-            }
-            else if (i <= MAX_LEVELS)
+            if (i <= MAX_LEVELS)
             {
                 char levelText[8];
-                sprintf(levelText, "%d", i);
+                sprintf(levelText, "%d", i + 1);
                 DrawCenteredText(levelText, btn.x + btn.width / 2, btn.y + btn.height / 2, FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
             }
         }
@@ -901,7 +891,7 @@ void RenderTimer(void)
     DrawText(timeBuffer, x, y, FONT_SIZE_TITLE, timerColor);
 }
 
-// Completion Animation Manager Functions
+// Completion Animation Manager Functions 
 
 void InitCompletionAnimation(void)
 {
@@ -1363,7 +1353,7 @@ bool IsReadyForCompletion(GameData *game)
     return true;
 }
 
-// PivotReturnAnimationSystem Functions
+// PivotReturnAnimationSystem Functions (Quick sort specific)
 
 void InitPivotReturnAnimation(void)
 {
