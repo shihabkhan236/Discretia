@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 
 // Helper functions
 static void PushStack(QuickSortData *data, int low, int high);
@@ -78,6 +79,30 @@ void QuickSortInit(GameData *game)
         data->completedPivots[k] = false;
     }
 
+    // Initialize animation system
+    for (int k = 0; k < game->arraySize; k++)
+    {
+        data->pivotAnimation.animating[k] = false;
+        data->pivotAnimation.startTime[k] = 0.0f;
+        data->pivotAnimation.duration[k] = 0.8f; // Default animation duration
+        data->pivotAnimation.startY[k] = 0.0f;
+        data->pivotAnimation.targetY[k] = 0.0f;
+        data->pivotAnimation.currentY[k] = 0.0f;
+        data->pivotAnimation.isElevating[k] = false;
+        data->pivotAnimation.bounceCount[k] = 0;
+
+        // Initialize trail for each position
+        for (int j = 0; j < 10; j++)
+        {
+            data->pivotAnimation.trail[k].positions[j] = (Vector2){0, 0};
+            data->pivotAnimation.trail[k].alphas[j] = 0.0f;
+        }
+        data->pivotAnimation.trail[k].currentIndex = 0;
+        data->pivotAnimation.trail[k].lastUpdateTime = 0.0f;
+    }
+    data->pivotAnimation.bounceHeight = 10.0f; // Small bounce effect
+    data->pivotAnimation.bounceDecay = 0.6f;
+
     game->algorithmData = data;
 
     // Update platform positions for Quick Sort
@@ -99,6 +124,9 @@ void QuickSortUpdate(GameData *game)
     if (!data)
         return;
 
+    // Update pivot animation if active
+    UpdatePivotAnimation(game);
+
     // Check if sorting is complete using proper QuickSort completion logic
     if (QuickSortIsComplete(game))
     {
@@ -116,6 +144,12 @@ void QuickSortUpdate(GameData *game)
         else if (data->pivotSwapping && !data->manualElevation)
         {
             data->manualElevation = true;
+
+            // Start smooth elevation animation for pivot elements
+            int finalPivotPos = data->i; // i was already incremented
+            StartPivotElevationAnimation(game, data->pivotIndex);
+            StartPivotElevationAnimation(game, finalPivotPos);
+
             printf("✓ Rectangles elevated! Now you can swap the pivot.\n");
         }
         else if (data->pivotSwapping && data->manualElevation)
@@ -223,6 +257,9 @@ void QuickSortUpdate(GameData *game)
                         // Mark this position as having a completed pivot
                         data->completedPivots[finalPivotPos] = true;
 
+                        // Start smooth falling animation for the pivot
+                        StartPivotFallingAnimation(game, finalPivotPos);
+
                         printf("✓ Pivot automatically falls into sorted region after swapping!\n");
 
                         // Add sub-arrays to stack
@@ -292,6 +329,9 @@ void QuickSortUpdate(GameData *game)
 
                 // Mark this position as having a completed pivot
                 data->completedPivots[finalPivotPos] = true;
+
+                // Start smooth falling animation for the pivot
+                StartPivotFallingAnimation(game, finalPivotPos);
 
                 printf("✓ Pivot placed in sorted region! Partition complete.\n");
 
@@ -484,7 +524,7 @@ void QuickSortGetStats(GameData *game, AlgorithmStats *stats)
 
     // Secondary stat: Current partition info
     sprintf(stats->secondaryStat, "Partition [%d...%d] | i=%d, j=%d | Pivot=%d (value=%d)",
-            data->low, data->high, data->i, data->j, data->pivotIndex, game->array[data->pivotIndex]);
+            data->low, data->high, data->i, data->j, data->pivotIndex, data->originalPivotValue);
 
     // Instructions based on current state
     stats->hasInstruction = true;
@@ -605,11 +645,29 @@ void QuickSortRender(GameData *game)
         // Adjust platform position based on state
         if (QuickSortIsSwappingElement(game, pos))
         {
-            platform.y -= BOX_SIZE + (BOX_SIZE / 2);
+            // Use animated position if available for swapping elements too
+            float animatedY = GetAnimatedPivotY(game, pos);
+            if (animatedY != platform.y)
+            {
+                platform.y = animatedY;
+            }
+            else
+            {
+                platform.y -= BOX_SIZE + (BOX_SIZE / 2);
+            }
         }
         else if (QuickSortIsCompletedPivot(game, pos))
         {
-            platform.y += BOX_SIZE + (BOX_SIZE / 2);
+            // Use animated position if available, otherwise use static position
+            float animatedY = GetAnimatedPivotY(game, pos);
+            if (animatedY != platform.y)
+            {
+                platform.y = animatedY;
+            }
+            else
+            {
+                platform.y += BOX_SIZE + (BOX_SIZE / 2);
+            }
         }
 
         float baseY = platform.y + platform.height; // No gap - start right after platform
@@ -661,7 +719,29 @@ void QuickSortRender(GameData *game)
         {
             Color pivotColor = {180, 50, 50, 255}; // Dark red
             DrawText("pivot", platform.x + (platform.width - MeasureText("pivot", FONT_SIZE_SMALL)) / 2,
-                     baseY + barHeight + 5, FONT_SIZE_SMALL, pivotColor); // Below the bar level with small gap
+                     baseY + (barHeight - FONT_SIZE_SMALL) / 2, FONT_SIZE_SMALL, pivotColor); // Same line as i and j bars
+        }
+    }
+
+    // Render animation trails for falling pivots
+    if (data)
+    {
+        for (int pos = 0; pos < game->arraySize; pos++)
+        {
+            if (data->pivotAnimation.animating[pos] && !data->pivotAnimation.isElevating[pos])
+            {
+                // Draw trail for falling pivot
+                for (int i = 0; i < 10; i++)
+                {
+                    if (data->pivotAnimation.trail[pos].alphas[i] > 0.01f)
+                    {
+                        Vector2 trailPos = data->pivotAnimation.trail[pos].positions[i];
+                        float alpha = data->pivotAnimation.trail[pos].alphas[i];
+                        Color trailColor = (Color){255, 200, 100, (unsigned char)(alpha * 100)};
+                        DrawCircleV(trailPos, 3.0f, trailColor);
+                    }
+                }
+            }
         }
     }
 
@@ -986,6 +1066,16 @@ bool QuickSortIsCompletedPivot(GameData *game, int position)
     return data->completedPivots[position];
 }
 
+// Check if a position is currently animating
+bool QuickSortIsAnimating(GameData *game, int position)
+{
+    if (!game || !game->algorithmData || position < 0 || position >= game->arraySize)
+        return false;
+
+    QuickSortData *data = (QuickSortData *)game->algorithmData;
+    return data->pivotAnimation.animating[position];
+}
+
 // Check if an element is involved in pivot swapping (should be elevated)
 bool QuickSortIsSwappingElement(GameData *game, int position)
 {
@@ -999,4 +1089,147 @@ bool QuickSortIsSwappingElement(GameData *game, int position)
     // During pivot swapping with manual elevation, elevate the pivot and its final position
     int finalPivotPos = data->i; // i was already incremented when we reach this state
     return (position == data->pivotIndex || position == finalPivotPos);
+}
+
+// Animation helper functions implementation
+void StartPivotElevationAnimation(GameData *game, int position)
+{
+    if (!game || !game->algorithmData || position < 0 || position >= game->arraySize)
+        return;
+
+    QuickSortData *data = (QuickSortData *)game->algorithmData;
+
+    data->pivotAnimation.animating[position] = true;
+    data->pivotAnimation.startTime[position] = GetTime();
+    data->pivotAnimation.duration[position] = 0.6f; // Quick but smooth elevation
+    data->pivotAnimation.startY[position] = game->platforms[position].y;
+    data->pivotAnimation.targetY[position] = game->platforms[position].y - BOX_SIZE - (BOX_SIZE / 2);
+    data->pivotAnimation.currentY[position] = data->pivotAnimation.startY[position];
+    data->pivotAnimation.isElevating[position] = true;
+    data->pivotAnimation.bounceCount[position] = 0; // No bounce for elevation
+
+    printf("⬆️ Starting smooth elevation animation for position %d!\n", position);
+}
+
+void StartPivotFallingAnimation(GameData *game, int position)
+{
+    if (!game || !game->algorithmData || position < 0 || position >= game->arraySize)
+        return;
+
+    QuickSortData *data = (QuickSortData *)game->algorithmData;
+
+    data->pivotAnimation.animating[position] = true;
+    data->pivotAnimation.startTime[position] = GetTime();
+    data->pivotAnimation.duration[position] = 1.2f; // Slightly longer falling animation for more drama
+    data->pivotAnimation.startY[position] = game->platforms[position].y;
+    data->pivotAnimation.targetY[position] = game->platforms[position].y + BOX_SIZE + (BOX_SIZE / 2);
+    data->pivotAnimation.currentY[position] = data->pivotAnimation.startY[position];
+    data->pivotAnimation.isElevating[position] = false;
+    data->pivotAnimation.bounceCount[position] = 3; // Add more bounces for falling effect
+
+    printf("🎭 Starting smooth falling animation for pivot at position %d!\n", position);
+}
+
+void UpdatePivotAnimation(GameData *game)
+{
+    if (!game || !game->algorithmData)
+        return;
+
+    QuickSortData *data = (QuickSortData *)game->algorithmData;
+    float currentTime = GetTime();
+
+    for (int position = 0; position < game->arraySize; position++)
+    {
+        if (!data->pivotAnimation.animating[position])
+            continue;
+
+        float elapsed = currentTime - data->pivotAnimation.startTime[position];
+        float progress = elapsed / data->pivotAnimation.duration[position];
+
+        if (progress >= 1.0f)
+        {
+            // Animation complete for this position
+            data->pivotAnimation.currentY[position] = data->pivotAnimation.targetY[position];
+            data->pivotAnimation.animating[position] = false;
+
+            // Clear trail
+            for (int j = 0; j < 10; j++)
+            {
+                data->pivotAnimation.trail[position].alphas[j] = 0.0f;
+            }
+            continue;
+        }
+
+        // Easing function for smooth animation
+        // Using ease-out cubic for falling, ease-in-out for elevation
+        float easedProgress;
+        if (data->pivotAnimation.isElevating[position])
+        {
+            // Ease-in-out cubic for smooth elevation
+            easedProgress = progress < 0.5f
+                                ? 4 * progress * progress * progress
+                                : 1 - powf(-2 * progress + 2, 3) / 2;
+        }
+        else
+        {
+            // Ease-out bounce for falling effect
+            easedProgress = 1 - powf(1 - progress, 3);
+
+            // Add bounce effect for falling
+            if (data->pivotAnimation.bounceCount[position] > 0 && progress > 0.7f)
+            {
+                float bounceProgress = (progress - 0.7f) / 0.3f; // Normalize bounce phase
+                float bounceAmplitude = data->pivotAnimation.bounceHeight *
+                                        powf(data->pivotAnimation.bounceDecay, 2 - data->pivotAnimation.bounceCount[position]);
+                float bounce = sinf(bounceProgress * 3.14159f * data->pivotAnimation.bounceCount[position]) * bounceAmplitude;
+
+                // Reduce bounce count as we progress
+                if (bounceProgress > 0.5f && data->pivotAnimation.bounceCount[position] > 1)
+                {
+                    data->pivotAnimation.bounceCount[position]--;
+                }
+
+                easedProgress -= bounce / (data->pivotAnimation.targetY[position] - data->pivotAnimation.startY[position]);
+                easedProgress = fmaxf(0.0f, fminf(1.0f, easedProgress)); // Clamp to [0,1]
+            }
+        }
+
+        // Calculate current position
+        data->pivotAnimation.currentY[position] = data->pivotAnimation.startY[position] +
+                                                  (data->pivotAnimation.targetY[position] - data->pivotAnimation.startY[position]) * easedProgress;
+
+        // Update trail for falling animations only
+        if (!data->pivotAnimation.isElevating[position] &&
+            currentTime - data->pivotAnimation.trail[position].lastUpdateTime > 0.05f) // Update every 50ms
+        {
+            // Add current position to trail
+            int index = data->pivotAnimation.trail[position].currentIndex;
+            data->pivotAnimation.trail[position].positions[index] = (Vector2){
+                game->platforms[position].x + BOX_SIZE / 2,
+                data->pivotAnimation.currentY[position] + BOX_SIZE / 2};
+            data->pivotAnimation.trail[position].alphas[index] = 1.0f;
+
+            // Update all trail alphas (fade out)
+            for (int j = 0; j < 10; j++)
+            {
+                data->pivotAnimation.trail[position].alphas[j] *= 0.85f; // Fade factor
+            }
+
+            data->pivotAnimation.trail[position].currentIndex = (index + 1) % 10;
+            data->pivotAnimation.trail[position].lastUpdateTime = currentTime;
+        }
+    }
+}
+
+float GetAnimatedPivotY(GameData *game, int position)
+{
+    if (!game || !game->algorithmData || position < 0 || position >= game->arraySize)
+        return game->platforms[position].y;
+
+    QuickSortData *data = (QuickSortData *)game->algorithmData;
+
+    if (!data->pivotAnimation.animating[position])
+        return game->platforms[position].y;
+
+    return data->pivotAnimation.currentY[position];
 }

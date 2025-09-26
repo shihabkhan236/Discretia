@@ -42,6 +42,30 @@ typedef struct
     // Track positions with completed pivots (in their final sorted position)
     bool completedPivots[MAX_ARRAY_SIZE];
 
+    // Animation system for smooth pivot transitions
+    struct
+    {
+        bool animating[MAX_ARRAY_SIZE];   // Whether each position is currently being animated
+        float startTime[MAX_ARRAY_SIZE];  // When each animation started
+        float duration[MAX_ARRAY_SIZE];   // Total animation duration in seconds for each position
+        float startY[MAX_ARRAY_SIZE];     // Starting Y position for each position
+        float targetY[MAX_ARRAY_SIZE];    // Target Y position for each position
+        float currentY[MAX_ARRAY_SIZE];   // Current animated Y position for each position
+        bool isElevating[MAX_ARRAY_SIZE]; // Whether each position is elevating (true) or dropping (false)
+        float bounceHeight;               // Additional bounce height for emphasis
+        int bounceCount[MAX_ARRAY_SIZE];  // Number of bounces remaining for each position
+        float bounceDecay;                // Decay factor for bounce amplitude
+
+        // Trail effect for falling pivots
+        struct
+        {
+            Vector2 positions[10]; // Trail positions (circular buffer)
+            float alphas[10];      // Alpha values for trail fade
+            int currentIndex;      // Current position in circular buffer
+            float lastUpdateTime;  // Last time trail was updated
+        } trail[MAX_ARRAY_SIZE];
+    } pivotAnimation;
+
 } QuickSortData;
 
 // Quick Sort function declarations
@@ -56,6 +80,13 @@ void QuickSortResetLevel(GameData *game, int level);
 // Utility function for UI rendering
 bool QuickSortShouldHideValue(GameData *game, int position);
 bool QuickSortIsCompletedPivot(GameData *game, int position);
+bool QuickSortIsAnimating(GameData *game, int position);
 bool QuickSortIsSwappingElement(GameData *game, int position);
+
+// Animation helper functions
+void StartPivotElevationAnimation(GameData *game, int position);
+void StartPivotFallingAnimation(GameData *game, int position);
+void UpdatePivotAnimation(GameData *game);
+float GetAnimatedPivotY(GameData *game, int position);
 
 #endif // QUICK_SORT_H
