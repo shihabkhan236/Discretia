@@ -307,11 +307,50 @@ void MergeSortUpdate(GameData* game) {
                         game->array[elementIndex] = 0; // Empty the box
                         printf("Picked up %d from original array\n", data->playerCarrying);
                     } else if (data->hasNumber && game->array[elementIndex] == 0) {
-                        // Drop element into empty box in original array
-                        game->array[elementIndex] = data->playerCarrying;
-                        printf("Dropped %d into original array\n", data->playerCarrying);
-                        data->playerCarrying = 0;
-                        data->hasNumber = false;
+                        // Validate drop position in original array during merge phase
+                        bool canDrop = true;
+                        
+                        if (data->highlightingEnabled && data->leftMergeIndex >= 0 && data->rightMergeIndex >= 0) {
+                            Subarray* left = &data->subarrays[data->leftMergeIndex];
+                            Subarray* right = &data->subarrays[data->rightMergeIndex];
+                            
+                            // Check if original array is the target for current merge
+                            if (left->parentIndex != -1) {
+                                // Target is not original array
+                                canDrop = false;
+                                printf("Wrong target! Must drop elements in parent subarray %d during this merge.\n", left->parentIndex);
+                            } else {
+                                // Original array is target - validate sequential placement
+                                int expectedPosition = -1;
+                                for (int k = 0; k < game->arraySize; k++) {
+                                    if (game->array[k] == 0) {
+                                        expectedPosition = k;
+                                        break;
+                                    }
+                                }
+                                
+                                if (elementIndex != expectedPosition) {
+                                    canDrop = false;
+                                    printf("Wrong position! Must place elements sequentially in first empty box (position %d).\n", expectedPosition);
+                                }
+                            }
+                        }
+                        
+                        if (canDrop) {
+                            // Drop element into empty box in original array
+                            game->array[elementIndex] = data->playerCarrying;
+                            printf("Dropped %d into original array\n", data->playerCarrying);
+                            data->playerCarrying = 0;
+                            data->hasNumber = false;
+                        } else {
+                            // Invalid drop - deduct heart
+                            game->hearts--;
+                            printf("Invalid placement! Hearts remaining: %d\n", game->hearts);
+                            
+                            if (game->hearts <= 0) {
+                                ChangeState(STATE_GAME_OVER);
+                            }
+                        }
                     } else if (data->hasNumber && game->array[elementIndex] != 0) {
                         printf("Box is not empty - cannot drop here\n");
                     } else {
@@ -363,11 +402,68 @@ void MergeSortUpdate(GameData* game) {
                             
                             printf("Picked up %d from subarray\n", data->playerCarrying);
                         } else if (data->hasNumber && sub->elements[j] == 0) {
-                            // Drop element into empty box in subarray
-                            sub->elements[j] = data->playerCarrying;
-                            printf("Dropped %d into subarray\n", data->playerCarrying);
-                            data->playerCarrying = 0;
-                            data->hasNumber = false;
+                            // Validate drop position during merge phase
+                            bool canDrop = true;
+                            
+                            if (data->highlightingEnabled && data->leftMergeIndex >= 0 && data->rightMergeIndex >= 0) {
+                                // During merge phase, validate correct placement
+                                Subarray* left = &data->subarrays[data->leftMergeIndex];
+                                Subarray* right = &data->subarrays[data->rightMergeIndex];
+                                
+                                // Determine target array (parent of left/right subarrays)
+                                bool isTargetArray = false;
+                                int expectedPosition = -1;
+                                
+                                if (left->parentIndex == -1) {
+                                    // Target is original array
+                                    if (i == -1) { // This would be original array, but we're in subarray loop
+                                        // Player is trying to drop in original array - this is handled above
+                                        canDrop = false;
+                                    } else {
+                                        // Player is trying to drop in wrong subarray
+                                        canDrop = false;
+                                        printf("Wrong target! Must drop elements in the original array during this merge.\n");
+                                    }
+                                } else {
+                                    // Target is parent subarray
+                                    if (i == left->parentIndex) {
+                                        isTargetArray = true;
+                                        // Find the first empty position in target array
+                                        for (int k = 0; k < sub->size; k++) {
+                                            if (sub->elements[k] == 0) {
+                                                expectedPosition = k;
+                                                break;
+                                            }
+                                        }
+                                        
+                                        // Validate sequential placement - must drop in first empty position
+                                        if (j != expectedPosition) {
+                                            canDrop = false;
+                                            printf("Wrong position! Must place elements sequentially in first empty box (position %d).\n", expectedPosition);
+                                        }
+                                    } else {
+                                        // Player is trying to drop in wrong subarray
+                                        canDrop = false;
+                                        printf("Wrong target! Must drop elements in the parent array (subarray %d) during this merge.\n", left->parentIndex);
+                                    }
+                                }
+                            }
+                            
+                            if (canDrop) {
+                                // Drop element into empty box in subarray
+                                sub->elements[j] = data->playerCarrying;
+                                printf("Dropped %d into subarray\n", data->playerCarrying);
+                                data->playerCarrying = 0;
+                                data->hasNumber = false;
+                            } else {
+                                // Invalid drop - deduct heart
+                                game->hearts--;
+                                printf("Invalid placement! Hearts remaining: %d\n", game->hearts);
+                                
+                                if (game->hearts <= 0) {
+                                    ChangeState(STATE_GAME_OVER);
+                                }
+                            }
                         } else if (data->hasNumber && sub->elements[j] != 0) {
                             printf("Box is not empty - cannot drop here\n");
                         } else {
