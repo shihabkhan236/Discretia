@@ -644,13 +644,13 @@ void QuickSortGetStats(GameData *game, AlgorithmStats *stats)
     stats->hasInstruction = true;
     if (data->needsIncrementI)
     {
-        strcpy(stats->instructionText, "📈 Press F to increment i (move partition boundary) before pivot swap");
-        stats->instructionColor = YELLOW;
+        strcpy(stats->instructionText, " Press F to increment i (move partition boundary) before pivot swap");
+        stats->instructionColor = ORANGE;
     }
     else if (data->pivotNeedsIncrementI)
     {
-        strcpy(stats->instructionText, "📈 Press F to increment i to match pivot position");
-        stats->instructionColor = YELLOW;
+        strcpy(stats->instructionText, " Press F to increment i to match pivot position");
+        stats->instructionColor = ORANGE;
     }
     else if (data->pivotInSortedRegion)
     {
@@ -678,12 +678,12 @@ void QuickSortGetStats(GameData *game, AlgorithmStats *stats)
         if (!data->manualElevation)
         {
             strcpy(stats->instructionText, "🔺 Press T to elevate rectangles for pivot swapping");
-            stats->instructionColor = YELLOW;
+            stats->instructionColor = ORANGE;
         }
         else
         {
             strcpy(stats->instructionText, "🎯 PIVOT SWAPPING: Press F to swap (will auto-fall after)!");
-            stats->instructionColor = YELLOW;
+            stats->instructionColor = ORANGE;
         }
     }
     else if (data->comparing)
