@@ -153,7 +153,7 @@ int GetPlayerPlatform(GameData *game)
         if (game->selectedAlgorithm == ALGO_QUICK_SORT)
         {
             // Check if we're in completion animation pivot return phase
-            if (game->completionAnimation.phase == COMPLETION_PIVOT_RETURN && 
+            if (game->completionAnimation.phase == COMPLETION_PIVOT_RETURN &&
                 game->completionAnimation.hasPivotsToReturn)
             {
                 // Use animated position during pivot return animation
@@ -456,14 +456,15 @@ void RenderGame(void)
         Rectangle startBtn = {SCREEN_WIDTH / 2 - BUTTON_WIDTH / 2, 300, BUTTON_WIDTH, BUTTON_HEIGHT};
         Rectangle quitBtn = {SCREEN_WIDTH / 2 - BUTTON_WIDTH / 2, 380, BUTTON_WIDTH, BUTTON_HEIGHT};
 
-        Color startColor = (game.selectedButton == 0) ? BLACK : LIGHTGRAY;
-        Color quitColor = (game.selectedButton == 1) ? BLACK : LIGHTGRAY;
+        Color startColor = (game.selectedButton == 0) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
+        Color quitColor = (game.selectedButton == 1) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
 
-        DrawRectangleLinesEx(startBtn, 3, startColor);
+        DrawRectangleRec(startBtn, startColor);
+        DrawRectangleLinesEx(startBtn, 2, UI_BORDER);
         DrawCenteredText("START GAME", startBtn.x + startBtn.width / 2, startBtn.y + startBtn.height / 2, FONT_SIZE_BUTTON, UI_TEXT_PRIMARY);
 
-
-        DrawRectangleLinesEx(quitBtn, 3, quitColor);
+        DrawRectangleRec(quitBtn, quitColor);
+        DrawRectangleLinesEx(quitBtn, 2, UI_BORDER);
         DrawCenteredText("QUIT", quitBtn.x + quitBtn.width / 2, quitBtn.y + quitBtn.height / 2, FONT_SIZE_BUTTON, UI_TEXT_PRIMARY);
         break;
 
@@ -485,8 +486,9 @@ void RenderGame(void)
                 BUTTON_WIDTH,
                 BUTTON_HEIGHT};
 
-            Color btnColor = (game.selectedButton == i) ? BLACK : LIGHTGRAY;
-            DrawRectangleLinesEx(btn, 3, btnColor);
+            Color btnColor = (game.selectedButton == i) ? UI_BUTTON_HOVER : UI_BUTTON_NORMAL;
+            DrawRectangleRec(btn, btnColor);
+            DrawRectangleLinesEx(btn, 2, UI_BORDER);
             // Convert to uppercase for better appearance with Mecha font
             char algoNameUpper[32];
             strncpy(algoNameUpper, algoNames[i], sizeof(algoNameUpper) - 1);
@@ -496,7 +498,7 @@ void RenderGame(void)
                 algoNameUpper[j] = toupper(algoNameUpper[j]);
             }
 
-            int fontSize = FONT_SIZE_BUTTON * 0.8;
+            int fontSize = FONT_SIZE_BUTTON;
             int textWidth = MeasureText(algoNameUpper, fontSize);
 
             while (textWidth > btn.width - 10 && fontSize > 10)
@@ -506,6 +508,10 @@ void RenderGame(void)
             }
 
             DrawCenteredText(algoNameUpper, btn.x + btn.width / 2, btn.y + btn.height / 2, fontSize, UI_TEXT_PRIMARY);
+            // DrawTextEx(gameFont, algoNameUpper,
+            //           (Vector2){btn.x + (btn.width - MeasureTextEx(gameFont, algoNameUpper, FONT_SIZE_BUTTON, 1).x)/2,
+            //                    btn.y + (btn.height - FONT_SIZE_BUTTON)/2},
+            //           FONT_SIZE_BUTTON, 1, UI_TEXT_PRIMARY);
         }
         break;
 
@@ -521,9 +527,13 @@ void RenderGame(void)
             Rectangle btn = {levelStartX + i * 70, levelY, 70, 70};
             Color btnColor = (game.selectedButton == i) ? BLACK : LIGHTGRAY;
 
-            DrawRectangleLinesEx(btn, 3, btnColor);
+            DrawRectangleLinesEx(btn, 2, btnColor);
 
-            if (i <= MAX_LEVELS)
+            if (i == 0)
+            {
+                DrawCenteredText("1", btn.x + btn.width / 2, btn.y + btn.height / 2, FONT_SIZE_BUTTON * 1.5, UI_TEXT_PRIMARY);
+            }
+            else if (i <= MAX_LEVELS)
             {
                 char levelText[8];
                 sprintf(levelText, "%d", i + 1);
@@ -572,7 +582,7 @@ void RenderGame(void)
             if (game.selectedAlgorithm == ALGO_QUICK_SORT)
             {
                 // Handle pivot return animation for all elements during completion
-                if (game.completionAnimation.phase == COMPLETION_PIVOT_RETURN && 
+                if (game.completionAnimation.phase == COMPLETION_PIVOT_RETURN &&
                     game.completionAnimation.hasPivotsToReturn)
                 {
                     platformRect.y = GetPivotReturnAnimatedY(i);
@@ -591,7 +601,7 @@ void RenderGame(void)
                     isCompletedPivot = true;
                     // Keep normal background color for completed pivots
                     platformColor = UI_BUTTON_NORMAL;
-                    
+
                     // Use existing pivot animation if available
                     if (QuickSortIsAnimating(&game, i))
                     {
@@ -739,7 +749,7 @@ void CleanupGame(void)
         free(game.completionAnimation.elementHighlighted);
         game.completionAnimation.elementHighlighted = NULL;
     }
-    
+
     // Clean up pivot return animation
     CleanupPivotReturnAnimation();
 
@@ -816,7 +826,7 @@ float CalculateLevelTimeLimit(int level)
 {
     if (level == 0)
     {
-        return 30.0f; // Level 1 (index 0): 60 seconds
+        return 30.0f * 5; // Level 1 (index 0): 60 seconds
     }
     return 30.0f + (15.0f * (level)); // Level 2+: 60 + (20 * level)
 }
@@ -891,7 +901,7 @@ void RenderTimer(void)
     DrawText(timeBuffer, x, y, FONT_SIZE_TITLE, timerColor);
 }
 
-// Completion Animation Manager Functions 
+// Completion Animation Manager Functions
 
 void InitCompletionAnimation(void)
 {
@@ -904,15 +914,15 @@ void InitCompletionAnimation(void)
     game.completionAnimation.arraySize = 0;
 
     // Initialize timing configuration with default values
-    game.completionAnimation.timing.verificationDelay = 0.2f;     // 0.2s - brief pause for verification
-    game.completionAnimation.timing.pivotReturnDuration = 0.8f;   // 0.8s - time for pivots to return to array
-    game.completionAnimation.timing.preAnimationDelay = 0.3f;     // 0.3s - pause before ripple starts
-    game.completionAnimation.timing.rippleElementDelay = 0.15f;   // 0.15s - time between each element
-    game.completionAnimation.timing.postAnimationDelay = 0.5f;    // 0.5s - pause after ripple completes
+    game.completionAnimation.timing.verificationDelay = 0.2f;   // 0.2s - brief pause for verification
+    game.completionAnimation.timing.pivotReturnDuration = 0.8f; // 0.8s - time for pivots to return to array
+    game.completionAnimation.timing.preAnimationDelay = 0.3f;   // 0.3s - pause before ripple starts
+    game.completionAnimation.timing.rippleElementDelay = 0.15f; // 0.15s - time between each element
+    game.completionAnimation.timing.postAnimationDelay = 0.5f;  // 0.5s - pause after ripple completes
 
     // Initialize element highlighting array to NULL (will be allocated when needed)
     game.completionAnimation.elementHighlighted = NULL;
-    
+
     // Initialize pivot return animation state
     game.completionAnimation.hasPivotsToReturn = false;
     game.completionAnimation.pivotStartY = NULL;
@@ -994,10 +1004,10 @@ void UpdateCompletionAnimation(void)
             {
                 game.completionAnimation.phase = COMPLETION_PIVOT_RETURN;
                 game.completionAnimation.phaseStartTime = currentTime;
-                
+
                 // Make player fall if they're standing on any platform as all platforms move down
                 QuickSortHandlePlayerFallWithCompletion(&game);
-                
+
                 printf("Completion animation: verification complete, entering pivot return phase\n");
             }
             else
@@ -1012,7 +1022,7 @@ void UpdateCompletionAnimation(void)
     case COMPLETION_PIVOT_RETURN:
         // Update pivot return animation
         UpdatePivotReturnAnimation();
-        
+
         // Check if pivot return animation is complete
         if (IsPivotReturnComplete())
         {
@@ -1059,7 +1069,7 @@ void UpdateCompletionAnimation(void)
                 free(game.completionAnimation.elementHighlighted);
                 game.completionAnimation.elementHighlighted = NULL;
             }
-            
+
             // Clean up pivot return animation
             CleanupPivotReturnAnimation();
 
@@ -1142,7 +1152,7 @@ void RenderCompletionHighlights(void)
             if (game.selectedAlgorithm == ALGO_QUICK_SORT)
             {
                 // Handle pivot return animation for all elements during completion
-                if (game.completionAnimation.phase == COMPLETION_PIVOT_RETURN && 
+                if (game.completionAnimation.phase == COMPLETION_PIVOT_RETURN &&
                     game.completionAnimation.hasPivotsToReturn)
                 {
                     platformRect.y = GetPivotReturnAnimatedY(i);
@@ -1353,14 +1363,14 @@ bool IsReadyForCompletion(GameData *game)
     return true;
 }
 
-// PivotReturnAnimationSystem Functions (Quick sort specific)
+// PivotReturnAnimationSystem Functions
 
 void InitPivotReturnAnimation(void)
 {
     // Initialize pivot return animation state
     game.completionAnimation.hasPivotsToReturn = false;
     game.completionAnimation.pivotCount = 0;
-    
+
     // Clean up any existing arrays
     if (game.completionAnimation.pivotStartY != NULL)
     {
@@ -1387,7 +1397,7 @@ void StartPivotReturnAnimation(void)
         game.completionAnimation.hasPivotsToReturn = false;
         return;
     }
-    
+
     // Count how many pivots need to return to main array
     int pivotsToReturn = 0;
     for (int i = 0; i < game.arraySize; i++)
@@ -1397,20 +1407,20 @@ void StartPivotReturnAnimation(void)
             pivotsToReturn++;
         }
     }
-    
+
     if (pivotsToReturn == 0)
     {
         game.completionAnimation.hasPivotsToReturn = false;
         return;
     }
-    
+
     // Allocate arrays for pivot animation data
     game.completionAnimation.pivotCount = game.arraySize;
-    game.completionAnimation.pivotStartY = (float*)calloc(game.arraySize, sizeof(float));
-    game.completionAnimation.pivotTargetY = (float*)calloc(game.arraySize, sizeof(float));
-    game.completionAnimation.pivotReturnProgress = (float*)calloc(game.arraySize, sizeof(float));
-    
-    if (!game.completionAnimation.pivotStartY || !game.completionAnimation.pivotTargetY || 
+    game.completionAnimation.pivotStartY = (float *)calloc(game.arraySize, sizeof(float));
+    game.completionAnimation.pivotTargetY = (float *)calloc(game.arraySize, sizeof(float));
+    game.completionAnimation.pivotReturnProgress = (float *)calloc(game.arraySize, sizeof(float));
+
+    if (!game.completionAnimation.pivotStartY || !game.completionAnimation.pivotTargetY ||
         !game.completionAnimation.pivotReturnProgress)
     {
         printf("ERROR: Failed to allocate memory for pivot return animation\n");
@@ -1418,10 +1428,10 @@ void StartPivotReturnAnimation(void)
         game.completionAnimation.hasPivotsToReturn = false;
         return;
     }
-    
+
     // Initialize positions - move all elements to the same lower level as completed pivots
     float targetLevel = game.platforms[0].y + BOX_SIZE + (BOX_SIZE / 2); // Lower level
-    
+
     for (int i = 0; i < game.arraySize; i++)
     {
         if (QuickSortIsCompletedPivot(&game, i))
@@ -1435,31 +1445,32 @@ void StartPivotReturnAnimation(void)
         {
             // Non-completed elements need to move down to the lower level
             game.completionAnimation.pivotStartY[i] = game.platforms[i].y; // Current main array position
-            game.completionAnimation.pivotTargetY[i] = targetLevel; // Move down to lower level
+            game.completionAnimation.pivotTargetY[i] = targetLevel;        // Move down to lower level
             game.completionAnimation.pivotReturnProgress[i] = 0.0f;
         }
     }
-    
+
     game.completionAnimation.hasPivotsToReturn = true;
-    printf("Pivot return animation initialized - moving %d elements down to align with %d completed pivots\n", 
+    printf("Pivot return animation initialized - moving %d elements down to align with %d completed pivots\n",
            game.arraySize - pivotsToReturn, pivotsToReturn);
 }
 
 void UpdatePivotReturnAnimation(void)
 {
-    if (!game.completionAnimation.hasPivotsToReturn || 
+    if (!game.completionAnimation.hasPivotsToReturn ||
         game.completionAnimation.pivotReturnProgress == NULL)
     {
         return;
     }
-    
+
     float currentTime = GetTime();
     float phaseElapsed = currentTime - game.completionAnimation.phaseStartTime;
     float progress = phaseElapsed / game.completionAnimation.timing.pivotReturnDuration;
-    
+
     // Clamp progress to [0, 1]
-    if (progress > 1.0f) progress = 1.0f;
-    
+    if (progress > 1.0f)
+        progress = 1.0f;
+
     // Update progress for all non-completed elements that need to move down
     for (int i = 0; i < game.completionAnimation.pivotCount; i++)
     {
@@ -1476,10 +1487,10 @@ bool IsPivotReturnComplete(void)
     {
         return true; // No pivots to return, so it's complete
     }
-    
+
     float currentTime = GetTime();
     float phaseElapsed = currentTime - game.completionAnimation.phaseStartTime;
-    
+
     return phaseElapsed >= game.completionAnimation.timing.pivotReturnDuration;
 }
 
@@ -1500,26 +1511,26 @@ void CleanupPivotReturnAnimation(void)
         free(game.completionAnimation.pivotReturnProgress);
         game.completionAnimation.pivotReturnProgress = NULL;
     }
-    
+
     game.completionAnimation.hasPivotsToReturn = false;
     game.completionAnimation.pivotCount = 0;
 }
 
 float GetPivotReturnAnimatedY(int position)
 {
-    if (!game.completionAnimation.hasPivotsToReturn || 
+    if (!game.completionAnimation.hasPivotsToReturn ||
         game.completionAnimation.pivotReturnProgress == NULL ||
         position < 0 || position >= game.completionAnimation.pivotCount)
     {
         return game.platforms[position].y; // Return default position
     }
-    
+
     float progress = game.completionAnimation.pivotReturnProgress[position];
     float startY = game.completionAnimation.pivotStartY[position];
     float targetY = game.completionAnimation.pivotTargetY[position];
-    
+
     // Use smooth easing for the animation (ease-out)
     float easedProgress = 1.0f - (1.0f - progress) * (1.0f - progress);
-    
+
     return startY + (targetY - startY) * easedProgress;
 }

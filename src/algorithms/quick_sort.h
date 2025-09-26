@@ -13,16 +13,18 @@ typedef struct
     int j;          // Current element being compared (starts at low)
 
     // State tracking
-    bool partitioning;        // Whether we're in partitioning phase
-    bool comparing;           // Whether we're comparing j-th element with pivot
-    bool needsSwap;           // Whether current comparison needs a swap
-    bool partitionComplete;   // Whether current partition is complete
-    bool waitingForSwap;      // Whether we're waiting for user to perform swap
-    bool pivotSwapping;       // Whether we're in pivot swapping phase
-    bool hideOtherValues;     // Whether to show '?' for non-pivot values during pivot swap
-    bool manualElevation;     // Whether user manually elevated rectangles with T key
-    bool pivotInSortedRegion; // Whether pivot has been placed in sorted region
-    bool needsIncrementI;     // Whether i needs to be incremented before pivot swapping
+    bool partitioning;         // Whether we're in partitioning phase
+    bool comparing;            // Whether we're comparing j-th element with pivot
+    bool needsSwap;            // Whether current comparison needs a swap
+    bool partitionComplete;    // Whether current partition is complete
+    bool waitingForSwap;       // Whether we're waiting for user to perform swap
+    bool pivotSwapping;        // Whether we're in pivot swapping phase
+    bool hideOtherValues;      // Whether to show '?' for non-pivot values during pivot swap
+    bool manualElevation;      // Whether user manually elevated rectangles with T key
+    bool pivotInSortedRegion;  // Whether pivot has been placed in sorted region
+    bool needsIncrementI;      // Whether i needs to be incremented before pivot swapping
+    bool iIncrementedWaiting;  // Whether i was incremented and waiting for manual swap when i==j
+    bool pivotNeedsIncrementI; // Whether i needs to be incremented before moving pivot to sorted region
 
     // Statistics
     int comparisons;         // Total comparisons made

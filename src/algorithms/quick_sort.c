@@ -61,6 +61,8 @@ void QuickSortInit(GameData *game)
     data->manualElevation = false;
     data->pivotInSortedRegion = false;
     data->needsIncrementI = false;
+    data->iIncrementedWaiting = false;
+    data->pivotNeedsIncrementI = false;
 
     data->comparisons = 0;
     data->swaps = 0;
@@ -165,11 +167,13 @@ void QuickSortUpdate(GameData *game)
     // Handle F key for swapping when needed
     if (IsKeyPressed(KEY_F))
     {
-        printf("DEBUG: F key pressed - comparing=%s, pivotSwapping=%s, pivotInSortedRegion=%s, needsIncrementI=%s\n",
+        printf("DEBUG: F key pressed - comparing=%s, pivotSwapping=%s, pivotInSortedRegion=%s, needsIncrementI=%s, iIncrementedWaiting=%s, pivotNeedsIncrementI=%s\n",
                data->comparing ? "true" : "false",
                data->pivotSwapping ? "true" : "false",
                data->pivotInSortedRegion ? "true" : "false",
-               data->needsIncrementI ? "true" : "false");
+               data->needsIncrementI ? "true" : "false",
+               data->iIncrementedWaiting ? "true" : "false",
+               data->pivotNeedsIncrementI ? "true" : "false");
 
         // Handle incrementing i before pivot swapping (Lomuto algorithm step)
         if (data->needsIncrementI)
@@ -177,6 +181,8 @@ void QuickSortUpdate(GameData *game)
             // Increment i to create final pivot position
             data->i++;
             data->needsIncrementI = false;
+            data->iIncrementedWaiting = false;
+            data->pivotNeedsIncrementI = false;
 
             int finalPivotPos = data->i;
             printf("✓ i incremented to %d! This becomes the final pivot position.\n", finalPivotPos);
@@ -190,7 +196,25 @@ void QuickSortUpdate(GameData *game)
             return;
         }
 
-        if (!data->comparing && !data->pivotSwapping && !data->pivotInSortedRegion)
+        // Handle incrementing i before moving pivot to sorted region (when pivot is already in place)
+        if (data->pivotNeedsIncrementI)
+        {
+            // Increment i to match pivot position
+            data->i++;
+            data->pivotNeedsIncrementI = false;
+
+            int finalPivotPos = data->i; // Now i == pivot position
+            printf("✓ i incremented to %d! i and pivot are now at the same position.\n", finalPivotPos);
+
+            // Enter the intermediate state for pivot sorted region
+            data->pivotInSortedRegion = true;
+            data->iIncrementedWaiting = true; // Use same state as regular swapping
+            printf("🎯 i and pivot are at the same position! Press F again to pick up pivot.\n");
+
+            return;
+        }
+
+        if (!data->comparing && !data->pivotSwapping && !data->pivotInSortedRegion && !data->pivotNeedsIncrementI)
         {
             printf("Wait for the next comparison phase or pivot action\n");
             return;
@@ -293,67 +317,98 @@ void QuickSortUpdate(GameData *game)
             return; // Exit after handling pivot swapping
         }
 
-        // Handle moving pivot to sorted region
+        // Handle moving pivot to sorted region (three-step process)
         if (data->pivotInSortedRegion)
         {
-            int finalPivotPos = data->i + 1; // For pivotInSortedRegion case, i wasn't incremented yet
+            int finalPivotPos = data->i; // i was already incremented to match pivot position
 
-            printf("DEBUG: Handling pivotInSortedRegion - finalPivotPos=%d, onSquare=%d, carrying=%s\n",
-                   finalPivotPos, onSquare, game->carrying ? "true" : "false");
+            printf("DEBUG: Handling pivotInSortedRegion - finalPivotPos=%d, onSquare=%d, carrying=%s, iIncrementedWaiting=%s\n",
+                   finalPivotPos, onSquare, game->carrying ? "true" : "false", data->iIncrementedWaiting ? "true" : "false");
 
-            // Check if player is on the pivot position
-            if (onSquare != finalPivotPos)
+            // Handle intermediate state when i == pivotIndex (Step 2: Pick up pivot)
+            if (data->iIncrementedWaiting && !game->carrying)
             {
-                printf("You must stand on position %d (pivot position) to move it to sorted region\n", finalPivotPos);
-                return;
-            }
-
-            // Handle picking up/placing the pivot
-            if (!game->carrying && game->array[onSquare] != 0)
-            {
-                // Pick up the pivot
-                game->playerNumber = game->array[onSquare];
-                game->array[onSquare] = 0;
-                game->carrying = true;
-                printf("Picked up pivot %d. Press F again to drop it in sorted region.\n", game->playerNumber);
-            }
-            else if (game->carrying && game->array[onSquare] == 0)
-            {
-                // Place the pivot back in sorted region
-                game->array[onSquare] = game->playerNumber;
-                game->playerNumber = 0;
-                game->carrying = false;
-                data->pivotInSortedRegion = false;
-                data->partitionComplete = true;
-                data->partitionsCompleted++;
-
-                // Mark this position as having a completed pivot
-                data->completedPivots[finalPivotPos] = true;
-
-                // Start smooth falling animation for the pivot
-                StartPivotFallingAnimation(game, finalPivotPos);
-
-                printf("✓ Pivot placed in sorted region! Partition complete.\n");
-
-                // Add sub-arrays to stack
-                if (finalPivotPos - 1 > data->low)
+                // Player must be on i/pivot position (they're the same) to pick up pivot
+                if (onSquare != data->i)
                 {
-                    PushStack(data, data->low, finalPivotPos - 1);
-                }
-                if (finalPivotPos + 1 < data->high)
-                {
-                    PushStack(data, finalPivotPos + 1, data->high);
+                    printf("You must stand on position %d (i/pivot) to pick up pivot\n", data->i);
+                    return;
                 }
 
-                // Start next partition
-                StartNewPartition(data, game);
+                if (game->array[onSquare] != 0)
+                {
+                    // Pick up the pivot
+                    game->playerNumber = game->array[onSquare];
+                    game->array[onSquare] = 0;
+                    game->carrying = true;
+                    printf("Picked up pivot %d from position %d. Press F again to place it back (it will fall to sorted region).\n",
+                           game->playerNumber, onSquare);
+                    return;
+                }
+                else
+                {
+                    printf("No pivot to pick up at position %d\n", onSquare);
+                    return;
+                }
             }
-            else
+
+            // Handle intermediate state when i == pivotIndex (Step 3: Put pivot back - it falls to sorted region)
+            if (data->iIncrementedWaiting && game->carrying)
             {
-                printf("DEBUG: Unexpected state - carrying=%s, array[%d]=%d\n",
-                       game->carrying ? "true" : "false", onSquare, game->array[onSquare]);
+                // Player must be on i/pivot position (they're the same) to put pivot back
+                if (onSquare != data->i)
+                {
+                    printf("You must stand on position %d (i/pivot) to place pivot back\n", data->i);
+                    return;
+                }
+
+                if (game->array[onSquare] == 0)
+                {
+                    // Place the pivot back - it will fall to sorted region
+                    game->array[onSquare] = game->playerNumber;
+                    game->playerNumber = 0;
+                    game->carrying = false;
+                    printf("✓ Placed pivot %d back at position %d! Pivot falls to sorted region.\n",
+                           game->array[onSquare], onSquare);
+
+                    // Complete the pivot placement
+                    data->pivotInSortedRegion = false;
+                    data->iIncrementedWaiting = false;
+                    data->partitionComplete = true;
+                    data->partitionsCompleted++;
+
+                    // Mark this position as having a completed pivot
+                    data->completedPivots[finalPivotPos] = true;
+
+                    // Start smooth falling animation for the pivot
+                    StartPivotFallingAnimation(game, finalPivotPos);
+
+                    printf("✓ Pivot automatically falls into sorted region after placement!\n");
+
+                    // Add sub-arrays to stack
+                    if (finalPivotPos - 1 > data->low)
+                    {
+                        PushStack(data, data->low, finalPivotPos - 1);
+                    }
+                    if (finalPivotPos + 1 < data->high)
+                    {
+                        PushStack(data, finalPivotPos + 1, data->high);
+                    }
+
+                    // Start next partition
+                    StartNewPartition(data, game);
+                    return;
+                }
+                else
+                {
+                    printf("Position %d is not empty. Clear it first.\n", onSquare);
+                    return;
+                }
             }
-            return; // Exit after handling sorted region placement
+
+            // This shouldn't happen with the new three-step process, but keep as fallback
+            printf("Error: Invalid state in pivotInSortedRegion handling\n");
+            return;
         }
 
         // Handle regular comparison phase
@@ -372,8 +427,8 @@ void QuickSortUpdate(GameData *game)
             return;
         }
 
-        // Check if we need to increment i first
-        if (!data->waitingForSwap)
+        // Check if we need to increment i first (Step 1)
+        if (!data->waitingForSwap && !data->iIncrementedWaiting)
         {
             // Player must be on j position to start the swap process
             if (onSquare != data->j)
@@ -390,14 +445,9 @@ void QuickSortUpdate(GameData *game)
             // Check if i and j are at the same position
             if (data->i == data->j)
             {
-                // Automatic swap (animation-like) - no manual interaction needed
-                printf("i and j are at the same position - automatic swap!\n");
-                printf("✓ Automatic swap complete! arr[%d] stays in place\n", data->i);
-
-                data->swaps++;
-                data->waitingForSwap = false; // No need to wait for manual swap
-
-                CompleteComparison(data, game);
+                // Enter intermediate state - show both i and j bars at same position
+                printf("i and j are now at the same position! Press F again to pick up element.\n");
+                data->iIncrementedWaiting = true; // Enter intermediate state
                 return;
             }
             else
@@ -406,67 +456,131 @@ void QuickSortUpdate(GameData *game)
                 printf("Now manually swap arr[i]=%d with arr[j]=%d\n",
                        game->array[data->i], game->array[data->j]);
                 data->waitingForSwap = true;
-
                 return;
             }
         }
 
-        // Second step: handle manual swapping between arr[i] and arr[j]
-        int swapPos1 = data->i; // Position i (where smaller element should go)
-        int swapPos2 = data->j; // Position j (current element being compared)
-
-        // Check if player is on one of the swap positions
-        if (onSquare != swapPos1 && onSquare != swapPos2)
+        // Handle intermediate state when i == j (Step 2: Pick up element)
+        if (data->iIncrementedWaiting && !game->carrying)
         {
-            printf("You must stand on position %d (i) or %d (j) to swap\n",
-                   swapPos1, swapPos2);
-            return;
-        }
-
-        // Handle the manual swapping process
-        if (!game->carrying && game->array[onSquare] != 0)
-        {
-            // Pick up number from current platform
-            game->playerNumber = game->array[onSquare];
-            game->array[onSquare] = 0;
-            game->carrying = true;
-            printf("Picked up %d from position %d\n", game->playerNumber, onSquare);
-        }
-        else if (game->carrying && game->array[onSquare] == 0)
-        {
-            // Place carried number on empty platform
-            game->array[onSquare] = game->playerNumber;
-            game->playerNumber = 0;
-            game->carrying = false;
-            printf("Placed %d on position %d\n", game->array[onSquare], onSquare);
-
-            // Check if swap is complete (both positions filled)
-            if (game->array[swapPos1] != 0 && game->array[swapPos2] != 0)
+            // Player must be on i/j position (they're the same) to pick up element
+            if (onSquare != data->i)
             {
-                // Verify swap was done correctly: smaller element should be at i
-                if (game->array[swapPos1] < game->array[data->pivotIndex])
-                {
-                    printf("✓ Correct swap! arr[i]=%d < pivot=%d\n",
-                           game->array[swapPos1], game->array[data->pivotIndex]);
-                    data->swaps++;
-                    data->waitingForSwap = false; // Reset for next comparison
+                printf("You must stand on position %d (i/j) to pick up element\n", data->i);
+                return;
+            }
 
-                    CompleteComparison(data, game);
-                }
-                else
-                {
-                    printf("✗ Wrong swap! Continue rearranging to put smaller element at position %d\n", swapPos1);
-                }
+            if (game->array[onSquare] != 0)
+            {
+                // Pick up the element
+                game->playerNumber = game->array[onSquare];
+                game->array[onSquare] = 0;
+                game->carrying = true;
+                printf("Picked up %d from position %d. Press F again to place it back.\n",
+                       game->playerNumber, onSquare);
+                return;
+            }
+            else
+            {
+                printf("No element to pick up at position %d\n", onSquare);
+                return;
             }
         }
-        else if (game->carrying && game->array[onSquare] != 0)
+
+        // Handle intermediate state when i == j (Step 3: Put element back)
+        if (data->iIncrementedWaiting && game->carrying)
         {
-            // Swap carried number with number on platform
-            int temp = game->array[onSquare];
-            game->array[onSquare] = game->playerNumber;
-            game->playerNumber = temp;
-            printf("Swapped numbers - now carrying %d\n", game->playerNumber);
+            // Player must be on i/j position (they're the same) to put element back
+            if (onSquare != data->i)
+            {
+                printf("You must stand on position %d (i/j) to place element back\n", data->i);
+                return;
+            }
+
+            if (game->array[onSquare] == 0)
+            {
+                // Place the element back
+                game->array[onSquare] = game->playerNumber;
+                game->playerNumber = 0;
+                game->carrying = false;
+                printf("✓ Placed %d back at position %d! Element stays in same place since i==j.\n",
+                       game->array[onSquare], onSquare);
+
+                // Complete the "swap" (element stayed in same place)
+                data->swaps++;
+                data->iIncrementedWaiting = false;
+                data->waitingForSwap = false;
+
+                CompleteComparison(data, game);
+                return;
+            }
+            else
+            {
+                printf("Position %d is not empty. Clear it first.\n", onSquare);
+                return;
+            }
         }
+
+        // Handle regular manual swapping between different i and j positions
+        if (data->waitingForSwap)
+        {
+            // Second step: handle manual swapping between arr[i] and arr[j]
+            int swapPos1 = data->i; // Position i (where smaller element should go)
+            int swapPos2 = data->j; // Position j (current element being compared)
+
+            // Check if player is on one of the swap positions
+            if (onSquare != swapPos1 && onSquare != swapPos2)
+            {
+                printf("You must stand on position %d (i) or %d (j) to swap\n",
+                       swapPos1, swapPos2);
+                return;
+            }
+
+            // Handle the manual swapping process
+            if (!game->carrying && game->array[onSquare] != 0)
+            {
+                // Pick up number from current platform
+                game->playerNumber = game->array[onSquare];
+                game->array[onSquare] = 0;
+                game->carrying = true;
+                printf("Picked up %d from position %d\n", game->playerNumber, onSquare);
+            }
+            else if (game->carrying && game->array[onSquare] == 0)
+            {
+                // Place carried number on empty platform
+                game->array[onSquare] = game->playerNumber;
+                game->playerNumber = 0;
+                game->carrying = false;
+                printf("Placed %d on position %d\n", game->array[onSquare], onSquare);
+
+                // Check if swap is complete (both positions filled)
+                if (game->array[swapPos1] != 0 && game->array[swapPos2] != 0)
+                {
+                    // Verify swap was done correctly: smaller element should be at i
+                    if (game->array[swapPos1] < game->array[data->pivotIndex])
+                    {
+                        printf("✓ Correct swap! arr[i]=%d < pivot=%d\n",
+                               game->array[swapPos1], game->array[data->pivotIndex]);
+                        data->swaps++;
+                        data->waitingForSwap = false; // Reset for next comparison
+
+                        CompleteComparison(data, game);
+                    }
+                    else
+                    {
+                        printf("✗ Wrong swap! Continue rearranging to put smaller element at position %d\n", swapPos1);
+                    }
+                }
+            }
+            else if (game->carrying && game->array[onSquare] != 0)
+            {
+                // Swap carried number with number on platform
+                int temp = game->array[onSquare];
+                game->array[onSquare] = game->playerNumber;
+                game->playerNumber = temp;
+                printf("Swapped numbers - now carrying %d\n", game->playerNumber);
+            }
+        } // End of waitingForSwap block
     }
 
     // Handle G key for moving j forward (when no swap needed)
@@ -533,10 +647,31 @@ void QuickSortGetStats(GameData *game, AlgorithmStats *stats)
         strcpy(stats->instructionText, "📈 Press F to increment i (move partition boundary) before pivot swap");
         stats->instructionColor = YELLOW;
     }
+    else if (data->pivotNeedsIncrementI)
+    {
+        strcpy(stats->instructionText, "📈 Press F to increment i to match pivot position");
+        stats->instructionColor = YELLOW;
+    }
     else if (data->pivotInSortedRegion)
     {
-        strcpy(stats->instructionText, "🔽 Pivot already in place! Press F to move to sorted region");
-        stats->instructionColor = GAME_SORTED;
+        if (data->iIncrementedWaiting)
+        {
+            if (game->carrying)
+            {
+                sprintf(stats->instructionText, "STEP 3: Press F to place pivot back at position %d (falls to sorted region)", data->i);
+                stats->instructionColor = GAME_SORTED;
+            }
+            else
+            {
+                sprintf(stats->instructionText, "STEP 2: Press F to pick up pivot at position %d (i==pivot)", data->i);
+                stats->instructionColor = GAME_SORTED;
+            }
+        }
+        else
+        {
+            strcpy(stats->instructionText, "🔽 Pivot ready! Press F to move to sorted region");
+            stats->instructionColor = GAME_SORTED;
+        }
     }
     else if (data->pivotSwapping)
     {
@@ -555,7 +690,20 @@ void QuickSortGetStats(GameData *game, AlgorithmStats *stats)
     {
         if (data->needsSwap)
         {
-            if (data->waitingForSwap)
+            if (data->iIncrementedWaiting)
+            {
+                if (game->carrying)
+                {
+                    sprintf(stats->instructionText, "STEP 3: Press F to place element back at position %d (i==j)", data->i);
+                    stats->instructionColor = GAME_COMPARING;
+                }
+                else
+                {
+                    sprintf(stats->instructionText, "STEP 2: Press F to pick up element at position %d (i==j)", data->i);
+                    stats->instructionColor = GAME_COMPARING;
+                }
+            }
+            else if (data->waitingForSwap)
             {
                 if (game->carrying)
                 {
@@ -647,14 +795,14 @@ void QuickSortRender(GameData *game)
 
         // Adjust platform position based on state - same logic as main rendering
         // Handle pivot return animation for all elements during completion
-        if (IsCompletionAnimationActive() && 
-            (GetCompletionAnimationPhase() == COMPLETION_PIVOT_RETURN) && 
+        if (IsCompletionAnimationActive() &&
+            (GetCompletionAnimationPhase() == COMPLETION_PIVOT_RETURN) &&
             HasPivotsToReturn())
         {
             platform.y = GetPivotReturnAnimatedY(pos);
         }
         // Keep all elements at lower level during other completion phases
-        else if (IsCompletionAnimationActive() && 
+        else if (IsCompletionAnimationActive() &&
                  (GetCompletionAnimationPhase() == COMPLETION_DELAYING ||
                   GetCompletionAnimationPhase() == COMPLETION_RIPPLING ||
                   GetCompletionAnimationPhase() == COMPLETION_FINISHED))
@@ -698,9 +846,17 @@ void QuickSortRender(GameData *game)
         if (data->j == pos)
         {
             Color jColor = {255, 165, 0, 255}; // Orange color for j
+            float jBarY = baseY;
+
+            // When i and j are at same position in intermediate state, stack them
+            if (data->iIncrementedWaiting && data->i == data->j && data->i == pos)
+            {
+                jBarY = baseY + barHeight; // Move j bar below i bar, no gap
+            }
+
             Rectangle jBar = {
                 platform.x, // Same x position as platform
-                baseY,      // Directly attached to platform bottom
+                jBarY,      // Position based on state
                 barWidth,
                 barHeight};
             DrawRectangleRec(jBar, jColor);
@@ -714,13 +870,13 @@ void QuickSortRender(GameData *game)
                      16, WHITE);
         }
 
-        // Draw i bar (green) - same horizontal level as j bar
+        // Draw i bar (green) - same horizontal level as j bar (except in intermediate state)
         if (data->i == pos && data->i >= 0)
         {
             Color iColor = {0, 180, 0, 255}; // Green color for i
             Rectangle iBar = {
                 platform.x, // Same x position as platform
-                baseY,      // Same level as j bar - directly attached to platform bottom
+                baseY,      // Always at base level - j moves below when needed
                 barWidth,
                 barHeight};
             DrawRectangleRec(iBar, iColor);
@@ -890,6 +1046,8 @@ void QuickSortResetLevel(GameData *game, int level)
         data->manualElevation = false;
         data->pivotInSortedRegion = false;
         data->needsIncrementI = false;
+        data->iIncrementedWaiting = false;
+        data->pivotNeedsIncrementI = false;
 
         data->comparisons = 0;
         data->swaps = 0;
@@ -1050,13 +1208,16 @@ static void CompleteComparison(QuickSortData *data, GameData *game)
         }
         else
         {
-            // Pivot is already in correct position, user must manually move it to sorted region
+            // Pivot is already in correct position, but we still need to increment i first
             data->partitionComplete = false;
-            data->pivotInSortedRegion = true; // User must press F to move to sorted region
-            data->pivotSwapping = false;      // Make sure we're not in swapping mode
-            data->needsIncrementI = false;    // No need to increment i
+            data->pivotNeedsIncrementI = true; // User must first press F to increment i
+            data->pivotInSortedRegion = false; // Will be set after i is incremented
+            data->pivotSwapping = false;       // Make sure we're not in swapping mode
+            data->needsIncrementI = false;     // No need to increment i
+            data->iIncrementedWaiting = false;
             data->comparing = false;
-            printf("✓ Pivot is already in correct position at %d! Press F to move it to sorted region.\n", finalPivotPos);
+            printf("🎯 PIVOT READY! First press F to increment i, then move pivot to sorted region\n");
+            printf("Current i=%d, will become i=%d after F key press (same as pivot position)\n", data->i, data->i + 1);
         }
     }
     else
@@ -1262,29 +1423,29 @@ void QuickSortHandlePlayerFallWithCompletion(GameData *game)
 
     // Check if player is currently standing on any platform at the main array level
     // During completion animation, all platforms move down, so player should fall regardless of which one they're on
-    
+
     bool playerAtMainLevel = false;
-    
+
     // Check if player is at the main array height (not already at the lower completed pivot level)
     for (int i = 0; i < game->arraySize; i++)
     {
         Rectangle platform = game->platforms[i];
-        
+
         // Check if player is horizontally aligned with any platform
         bool horizontallyAligned = (game->player.x + game->player.width > platform.x + 8) &&
-                                  (game->player.x < platform.x + platform.width - 8);
-        
+                                   (game->player.x < platform.x + platform.width - 8);
+
         // Check if player is at the main array height (before platforms move down)
         bool atMainArrayHeight = (game->player.y + game->player.height >= platform.y - 5) &&
-                               (game->player.y + game->player.height <= platform.y + 5);
-        
+                                 (game->player.y + game->player.height <= platform.y + 5);
+
         if (horizontallyAligned && atMainArrayHeight)
         {
             playerAtMainLevel = true;
             break;
         }
     }
-    
+
     if (playerAtMainLevel)
     {
         // Player is standing on a platform at main level - make them fall as all platforms move down
