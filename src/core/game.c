@@ -152,7 +152,14 @@ int GetPlayerPlatform(GameData *game)
         // Enhanced collision detection for Quick Sort state
         if (game->selectedAlgorithm == ALGO_QUICK_SORT)
         {
-            if (QuickSortIsCompletedPivot(game, i))
+            // Check if we're in completion animation pivot return phase
+            if (game->completionAnimation.phase == COMPLETION_PIVOT_RETURN && 
+                game->completionAnimation.hasPivotsToReturn)
+            {
+                // Use animated position during pivot return animation
+                platform.y = GetPivotReturnAnimatedY(i);
+            }
+            else if (QuickSortIsCompletedPivot(game, i))
             {
                 // Adjusted collision positioning: move detection down with completed pivots
                 platform.y += BOX_SIZE + (BOX_SIZE / 2);
@@ -574,12 +581,28 @@ void RenderGame(void)
 
             if (game.selectedAlgorithm == ALGO_QUICK_SORT)
             {
-                if (QuickSortIsCompletedPivot(&game, i))
+                // Handle pivot return animation for all elements during completion
+                if (game.completionAnimation.phase == COMPLETION_PIVOT_RETURN && 
+                    game.completionAnimation.hasPivotsToReturn)
+                {
+                    platformRect.y = GetPivotReturnAnimatedY(i);
+                }
+                // Keep all elements at lower level during other completion phases
+                else if (game.completionAnimation.phase == COMPLETION_DELAYING ||
+                         game.completionAnimation.phase == COMPLETION_RIPPLING ||
+                         game.completionAnimation.phase == COMPLETION_FINISHED)
+                {
+                    // All elements at the same lower level during completion animation
+                    platformRect.y += BOX_SIZE + (BOX_SIZE / 2);
+                }
+                // Handle Quick Sort specific positioning during normal gameplay
+                else if (QuickSortIsCompletedPivot(&game, i))
                 {
                     isCompletedPivot = true;
                     // Keep normal background color for completed pivots
                     platformColor = UI_BUTTON_NORMAL;
-                    // Use animated position if available, otherwise use static position
+                    
+                    // Use existing pivot animation if available
                     if (QuickSortIsAnimating(&game, i))
                     {
                         platformRect.y = GetAnimatedPivotY(&game, i);
@@ -726,6 +749,9 @@ void CleanupGame(void)
         free(game.completionAnimation.elementHighlighted);
         game.completionAnimation.elementHighlighted = NULL;
     }
+    
+    // Clean up pivot return animation
+    CleanupPivotReturnAnimation();
 
     printf("Game cleaned up successfully\n");
 }
@@ -888,13 +914,21 @@ void InitCompletionAnimation(void)
     game.completionAnimation.arraySize = 0;
 
     // Initialize timing configuration with default values
-    game.completionAnimation.timing.verificationDelay = 0.2f;   // 0.2s - brief pause for verification
-    game.completionAnimation.timing.preAnimationDelay = 0.3f;   // 0.3s - pause before ripple starts
-    game.completionAnimation.timing.rippleElementDelay = 0.15f; // 0.15s - time between each element
-    game.completionAnimation.timing.postAnimationDelay = 0.5f;  // 0.5s - pause after ripple completes
+    game.completionAnimation.timing.verificationDelay = 0.2f;     // 0.2s - brief pause for verification
+    game.completionAnimation.timing.pivotReturnDuration = 0.8f;   // 0.8s - time for pivots to return to array
+    game.completionAnimation.timing.preAnimationDelay = 0.3f;     // 0.3s - pause before ripple starts
+    game.completionAnimation.timing.rippleElementDelay = 0.15f;   // 0.15s - time between each element
+    game.completionAnimation.timing.postAnimationDelay = 0.5f;    // 0.5s - pause after ripple completes
 
     // Initialize element highlighting array to NULL (will be allocated when needed)
     game.completionAnimation.elementHighlighted = NULL;
+    
+    // Initialize pivot return animation state
+    game.completionAnimation.hasPivotsToReturn = false;
+    game.completionAnimation.pivotStartY = NULL;
+    game.completionAnimation.pivotTargetY = NULL;
+    game.completionAnimation.pivotReturnProgress = NULL;
+    game.completionAnimation.pivotCount = 0;
 
     printf("Completion animation system initialized\n");
 }
@@ -938,6 +972,13 @@ void StartCompletionAnimation(void)
         game.completionAnimation.elementHighlighted[i] = false;
     }
 
+    // Initialize pivot return animation for Quick Sort
+    InitPivotReturnAnimation();
+    if (game.selectedAlgorithm == ALGO_QUICK_SORT)
+    {
+        StartPivotReturnAnimation();
+    }
+
     printf("Completion animation started - entering verification phase\n");
 }
 
@@ -955,12 +996,39 @@ void UpdateCompletionAnimation(void)
     switch (game.completionAnimation.phase)
     {
     case COMPLETION_VERIFYING:
-        // Wait for verification delay, then move to delaying phase
+        // Wait for verification delay, then check if pivot return is needed
         if (phaseElapsed >= game.completionAnimation.timing.verificationDelay)
+        {
+            // Check if we need pivot return animation (Quick Sort specific)
+            if (game.selectedAlgorithm == ALGO_QUICK_SORT && game.completionAnimation.hasPivotsToReturn)
+            {
+                game.completionAnimation.phase = COMPLETION_PIVOT_RETURN;
+                game.completionAnimation.phaseStartTime = currentTime;
+                
+                // Make player fall if they're standing on any platform as all platforms move down
+                QuickSortHandlePlayerFallWithCompletion(&game);
+                
+                printf("Completion animation: verification complete, entering pivot return phase\n");
+            }
+            else
+            {
+                game.completionAnimation.phase = COMPLETION_DELAYING;
+                game.completionAnimation.phaseStartTime = currentTime;
+                printf("Completion animation: verification complete, entering delay phase\n");
+            }
+        }
+        break;
+
+    case COMPLETION_PIVOT_RETURN:
+        // Update pivot return animation
+        UpdatePivotReturnAnimation();
+        
+        // Check if pivot return animation is complete
+        if (IsPivotReturnComplete())
         {
             game.completionAnimation.phase = COMPLETION_DELAYING;
             game.completionAnimation.phaseStartTime = currentTime;
-            printf("Completion animation: verification complete, entering delay phase\n");
+            printf("Completion animation: pivot return complete, entering delay phase\n");
         }
         break;
 
@@ -1001,6 +1069,9 @@ void UpdateCompletionAnimation(void)
                 free(game.completionAnimation.elementHighlighted);
                 game.completionAnimation.elementHighlighted = NULL;
             }
+            
+            // Clean up pivot return animation
+            CleanupPivotReturnAnimation();
 
             printf("Completion animation finished - transitioning to level complete\n");
             ChangeState(STATE_LEVEL_COMPLETE);
@@ -1016,6 +1087,16 @@ void UpdateCompletionAnimation(void)
 bool IsCompletionAnimationActive(void)
 {
     return game.completionAnimation.phase != COMPLETION_INACTIVE;
+}
+
+CompletionAnimationPhase GetCompletionAnimationPhase(void)
+{
+    return game.completionAnimation.phase;
+}
+
+bool HasPivotsToReturn(void)
+{
+    return game.completionAnimation.hasPivotsToReturn;
 }
 
 // RippleAnimationSystem Functions
@@ -1070,7 +1151,22 @@ void RenderCompletionHighlights(void)
             // Adjust position for Quick Sort elevated/lowered elements
             if (game.selectedAlgorithm == ALGO_QUICK_SORT)
             {
-                if (QuickSortIsCompletedPivot(&game, i))
+                // Handle pivot return animation for all elements during completion
+                if (game.completionAnimation.phase == COMPLETION_PIVOT_RETURN && 
+                    game.completionAnimation.hasPivotsToReturn)
+                {
+                    platformRect.y = GetPivotReturnAnimatedY(i);
+                }
+                // Keep all elements at lower level during other completion phases
+                else if (game.completionAnimation.phase == COMPLETION_DELAYING ||
+                         game.completionAnimation.phase == COMPLETION_RIPPLING ||
+                         game.completionAnimation.phase == COMPLETION_FINISHED)
+                {
+                    // All elements at the same lower level during completion animation
+                    platformRect.y += BOX_SIZE + (BOX_SIZE / 2);
+                }
+                // Handle normal gameplay positioning
+                else if (QuickSortIsCompletedPivot(&game, i))
                 {
                     // Completed pivots are lowered
                     platformRect.y += BOX_SIZE + (BOX_SIZE / 2);
@@ -1265,4 +1361,175 @@ bool IsReadyForCompletion(GameData *game)
 
     printf("✅ All completion verification checks passed - ready for completion animation!\n");
     return true;
+}
+
+// PivotReturnAnimationSystem Functions
+
+void InitPivotReturnAnimation(void)
+{
+    // Initialize pivot return animation state
+    game.completionAnimation.hasPivotsToReturn = false;
+    game.completionAnimation.pivotCount = 0;
+    
+    // Clean up any existing arrays
+    if (game.completionAnimation.pivotStartY != NULL)
+    {
+        free(game.completionAnimation.pivotStartY);
+        game.completionAnimation.pivotStartY = NULL;
+    }
+    if (game.completionAnimation.pivotTargetY != NULL)
+    {
+        free(game.completionAnimation.pivotTargetY);
+        game.completionAnimation.pivotTargetY = NULL;
+    }
+    if (game.completionAnimation.pivotReturnProgress != NULL)
+    {
+        free(game.completionAnimation.pivotReturnProgress);
+        game.completionAnimation.pivotReturnProgress = NULL;
+    }
+}
+
+void StartPivotReturnAnimation(void)
+{
+    // Only applicable for Quick Sort
+    if (game.selectedAlgorithm != ALGO_QUICK_SORT)
+    {
+        game.completionAnimation.hasPivotsToReturn = false;
+        return;
+    }
+    
+    // Count how many pivots need to return to main array
+    int pivotsToReturn = 0;
+    for (int i = 0; i < game.arraySize; i++)
+    {
+        if (QuickSortIsCompletedPivot(&game, i))
+        {
+            pivotsToReturn++;
+        }
+    }
+    
+    if (pivotsToReturn == 0)
+    {
+        game.completionAnimation.hasPivotsToReturn = false;
+        return;
+    }
+    
+    // Allocate arrays for pivot animation data
+    game.completionAnimation.pivotCount = game.arraySize;
+    game.completionAnimation.pivotStartY = (float*)calloc(game.arraySize, sizeof(float));
+    game.completionAnimation.pivotTargetY = (float*)calloc(game.arraySize, sizeof(float));
+    game.completionAnimation.pivotReturnProgress = (float*)calloc(game.arraySize, sizeof(float));
+    
+    if (!game.completionAnimation.pivotStartY || !game.completionAnimation.pivotTargetY || 
+        !game.completionAnimation.pivotReturnProgress)
+    {
+        printf("ERROR: Failed to allocate memory for pivot return animation\n");
+        CleanupPivotReturnAnimation();
+        game.completionAnimation.hasPivotsToReturn = false;
+        return;
+    }
+    
+    // Initialize positions - move all elements to the same lower level as completed pivots
+    float targetLevel = game.platforms[0].y + BOX_SIZE + (BOX_SIZE / 2); // Lower level
+    
+    for (int i = 0; i < game.arraySize; i++)
+    {
+        if (QuickSortIsCompletedPivot(&game, i))
+        {
+            // Completed pivots are already at the target level - no animation needed
+            game.completionAnimation.pivotStartY[i] = targetLevel;
+            game.completionAnimation.pivotTargetY[i] = targetLevel;
+            game.completionAnimation.pivotReturnProgress[i] = 1.0f; // Already at target
+        }
+        else
+        {
+            // Non-completed elements need to move down to the lower level
+            game.completionAnimation.pivotStartY[i] = game.platforms[i].y; // Current main array position
+            game.completionAnimation.pivotTargetY[i] = targetLevel; // Move down to lower level
+            game.completionAnimation.pivotReturnProgress[i] = 0.0f;
+        }
+    }
+    
+    game.completionAnimation.hasPivotsToReturn = true;
+    printf("Pivot return animation initialized - moving %d elements down to align with %d completed pivots\n", 
+           game.arraySize - pivotsToReturn, pivotsToReturn);
+}
+
+void UpdatePivotReturnAnimation(void)
+{
+    if (!game.completionAnimation.hasPivotsToReturn || 
+        game.completionAnimation.pivotReturnProgress == NULL)
+    {
+        return;
+    }
+    
+    float currentTime = GetTime();
+    float phaseElapsed = currentTime - game.completionAnimation.phaseStartTime;
+    float progress = phaseElapsed / game.completionAnimation.timing.pivotReturnDuration;
+    
+    // Clamp progress to [0, 1]
+    if (progress > 1.0f) progress = 1.0f;
+    
+    // Update progress for all non-completed elements that need to move down
+    for (int i = 0; i < game.completionAnimation.pivotCount; i++)
+    {
+        if (!QuickSortIsCompletedPivot(&game, i))
+        {
+            game.completionAnimation.pivotReturnProgress[i] = progress;
+        }
+    }
+}
+
+bool IsPivotReturnComplete(void)
+{
+    if (!game.completionAnimation.hasPivotsToReturn)
+    {
+        return true; // No pivots to return, so it's complete
+    }
+    
+    float currentTime = GetTime();
+    float phaseElapsed = currentTime - game.completionAnimation.phaseStartTime;
+    
+    return phaseElapsed >= game.completionAnimation.timing.pivotReturnDuration;
+}
+
+void CleanupPivotReturnAnimation(void)
+{
+    if (game.completionAnimation.pivotStartY != NULL)
+    {
+        free(game.completionAnimation.pivotStartY);
+        game.completionAnimation.pivotStartY = NULL;
+    }
+    if (game.completionAnimation.pivotTargetY != NULL)
+    {
+        free(game.completionAnimation.pivotTargetY);
+        game.completionAnimation.pivotTargetY = NULL;
+    }
+    if (game.completionAnimation.pivotReturnProgress != NULL)
+    {
+        free(game.completionAnimation.pivotReturnProgress);
+        game.completionAnimation.pivotReturnProgress = NULL;
+    }
+    
+    game.completionAnimation.hasPivotsToReturn = false;
+    game.completionAnimation.pivotCount = 0;
+}
+
+float GetPivotReturnAnimatedY(int position)
+{
+    if (!game.completionAnimation.hasPivotsToReturn || 
+        game.completionAnimation.pivotReturnProgress == NULL ||
+        position < 0 || position >= game.completionAnimation.pivotCount)
+    {
+        return game.platforms[position].y; // Return default position
+    }
+    
+    float progress = game.completionAnimation.pivotReturnProgress[position];
+    float startY = game.completionAnimation.pivotStartY[position];
+    float targetY = game.completionAnimation.pivotTargetY[position];
+    
+    // Use smooth easing for the animation (ease-out)
+    float easedProgress = 1.0f - (1.0f - progress) * (1.0f - progress);
+    
+    return startY + (targetY - startY) * easedProgress;
 }

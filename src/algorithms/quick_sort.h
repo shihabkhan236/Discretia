@@ -89,4 +89,7 @@ void StartPivotFallingAnimation(GameData *game, int position);
 void UpdatePivotAnimation(GameData *game);
 float GetAnimatedPivotY(GameData *game, int position);
 
+// Player physics helper
+void QuickSortHandlePlayerFallWithCompletion(GameData *game);
+
 #endif // QUICK_SORT_H

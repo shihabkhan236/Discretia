@@ -45,6 +45,7 @@ typedef enum
 {
     COMPLETION_INACTIVE,
     COMPLETION_VERIFYING,
+    COMPLETION_PIVOT_RETURN,
     COMPLETION_DELAYING,
     COMPLETION_RIPPLING,
     COMPLETION_FINISHED
@@ -54,6 +55,7 @@ typedef enum
 typedef struct
 {
     float verificationDelay;      // 0.2s - brief pause for verification
+    float pivotReturnDuration;    // 0.8s - time for pivots to return to array
     float preAnimationDelay;      // 0.3s - pause before ripple starts
     float rippleElementDelay;     // 0.15s - time between each element
     float postAnimationDelay;     // 0.5s - pause after ripple completes
@@ -70,6 +72,13 @@ typedef struct
     bool* elementHighlighted;
     int arraySize;
     AnimationTimingConfig timing;
+    
+    // Pivot return animation state (Quick Sort specific)
+    bool hasPivotsToReturn;
+    float* pivotStartY;
+    float* pivotTargetY;
+    float* pivotReturnProgress;
+    int pivotCount;
 } CompletionAnimationState;
 
 // Forward declarations
@@ -183,6 +192,16 @@ void InitCompletionAnimation(void);
 void StartCompletionAnimation(void);
 void UpdateCompletionAnimation(void);
 bool IsCompletionAnimationActive(void);
+CompletionAnimationPhase GetCompletionAnimationPhase(void);
+bool HasPivotsToReturn(void);
+
+// PivotReturnAnimationSystem functions (Quick Sort specific)
+void InitPivotReturnAnimation(void);
+void StartPivotReturnAnimation(void);
+void UpdatePivotReturnAnimation(void);
+bool IsPivotReturnComplete(void);
+void CleanupPivotReturnAnimation(void);
+float GetPivotReturnAnimatedY(int position);
 
 // RippleAnimationSystem functions
 void UpdateRippleAnimation(void);

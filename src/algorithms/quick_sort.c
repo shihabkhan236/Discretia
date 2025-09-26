@@ -73,8 +73,8 @@ void QuickSortInit(GameData *game)
     // Initialize stack for recursive calls
     data->stackTop = -1;
 
-    // Initialize completed pivots tracking
-    for (int k = 0; k < game->arraySize; k++)
+    // Initialize completed pivots tracking - clear entire array to prevent stale data
+    for (int k = 0; k < MAX_ARRAY_SIZE; k++)
     {
         data->completedPivots[k] = false;
     }
@@ -633,17 +633,37 @@ void QuickSortRender(GameData *game)
         DrawRectangleLinesEx(game->platforms[data->j], 4, brightYellow);
     }
 
-    // Fill pivot box with light red
-    Color lightRed = {255, 150, 150, 128}; // Light red with some transparency
-    DrawRectangleRec(game->platforms[data->pivotIndex], lightRed);
+    // Fill pivot box with light red (only during normal gameplay, not during completion)
+    if (!IsCompletionAnimationActive())
+    {
+        Color lightRed = {255, 150, 150, 128}; // Light red with some transparency
+        DrawRectangleRec(game->platforms[data->pivotIndex], lightRed);
+    }
 
     // Draw i and j as rectangular bars instead of text labels
     for (int pos = 0; pos < game->arraySize; pos++)
     {
         Rectangle platform = game->platforms[pos];
 
-        // Adjust platform position based on state
-        if (QuickSortIsSwappingElement(game, pos))
+        // Adjust platform position based on state - same logic as main rendering
+        // Handle pivot return animation for all elements during completion
+        if (IsCompletionAnimationActive() && 
+            (GetCompletionAnimationPhase() == COMPLETION_PIVOT_RETURN) && 
+            HasPivotsToReturn())
+        {
+            platform.y = GetPivotReturnAnimatedY(pos);
+        }
+        // Keep all elements at lower level during other completion phases
+        else if (IsCompletionAnimationActive() && 
+                 (GetCompletionAnimationPhase() == COMPLETION_DELAYING ||
+                  GetCompletionAnimationPhase() == COMPLETION_RIPPLING ||
+                  GetCompletionAnimationPhase() == COMPLETION_FINISHED))
+        {
+            // All elements at the same lower level during completion animation
+            platform.y += BOX_SIZE + (BOX_SIZE / 2);
+        }
+        // Handle normal gameplay positioning
+        else if (QuickSortIsSwappingElement(game, pos))
         {
             // Use animated position if available for swapping elements too
             float animatedY = GetAnimatedPivotY(game, pos);
@@ -880,8 +900,8 @@ void QuickSortResetLevel(GameData *game, int level)
         data->originalIValue = 0;
         data->stackTop = -1;
 
-        // Reset completed pivots tracking
-        for (int k = 0; k < game->arraySize; k++)
+        // Reset completed pivots tracking - clear entire array to prevent stale data
+        for (int k = 0; k < MAX_ARRAY_SIZE; k++)
         {
             data->completedPivots[k] = false;
         }
@@ -1059,7 +1079,7 @@ bool QuickSortShouldHideValue(GameData *game, int position)
 
 bool QuickSortIsCompletedPivot(GameData *game, int position)
 {
-    if (!game || !game->algorithmData)
+    if (!game || !game->algorithmData || position < 0 || position >= game->arraySize)
         return false;
 
     QuickSortData *data = (QuickSortData *)game->algorithmData;
@@ -1232,4 +1252,44 @@ float GetAnimatedPivotY(GameData *game, int position)
         return game->platforms[position].y;
 
     return data->pivotAnimation.currentY[position];
+}
+
+// Helper function to make player fall when all platforms move down during completion animation
+void QuickSortHandlePlayerFallWithCompletion(GameData *game)
+{
+    if (!game)
+        return;
+
+    // Check if player is currently standing on any platform at the main array level
+    // During completion animation, all platforms move down, so player should fall regardless of which one they're on
+    
+    bool playerAtMainLevel = false;
+    
+    // Check if player is at the main array height (not already at the lower completed pivot level)
+    for (int i = 0; i < game->arraySize; i++)
+    {
+        Rectangle platform = game->platforms[i];
+        
+        // Check if player is horizontally aligned with any platform
+        bool horizontallyAligned = (game->player.x + game->player.width > platform.x + 8) &&
+                                  (game->player.x < platform.x + platform.width - 8);
+        
+        // Check if player is at the main array height (before platforms move down)
+        bool atMainArrayHeight = (game->player.y + game->player.height >= platform.y - 5) &&
+                               (game->player.y + game->player.height <= platform.y + 5);
+        
+        if (horizontallyAligned && atMainArrayHeight)
+        {
+            playerAtMainLevel = true;
+            break;
+        }
+    }
+    
+    if (playerAtMainLevel)
+    {
+        // Player is standing on a platform at main level - make them fall as all platforms move down
+        game->isOnGround = false;
+        game->velocity.y = 50.0f; // Give a small downward velocity for immediate visual feedback
+        printf("Player falling as all platforms move down during completion animation\n");
+    }
 }
